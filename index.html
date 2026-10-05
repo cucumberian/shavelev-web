@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Таблицы Шевелева — клон</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+<h1>Таблицы Шевелева <span style="font-weight:normal;font-size:11px">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span></h1>
+
+<fieldset><legend>Материал труб</legend>
+ <div class="row"><b>Комбинация труб:</b>
+  <select id="material" style="width:340px"></select>
+  <span class="fdoc" id="gostLink"></span></div>
+ <div class="row"><b>Состояние:</b>
+  <label><input type="radio" name="wear" value="new" checked> новые</label>
+  <label><input type="radio" name="wear" value="old"> неновые</label>
+  <span class="hint">(неновые: стальные и чугунные)</span></div>
+</fieldset>
+
+<div class="col2">
+<div>
+<fieldset><legend>Труба</legend>
+ <div class="row">Диаметр: <select id="dsel" style="width:120px"></select></div>
+ <div class="row" id="thicknessRow" style="display:none">Толщина стенки, мм:
+   <select id="tsel" style="width:70px"></select></div>
+ <div class="row" id="dcalcRow">Расчётный d<sub>в</sub>, мм: <span id="dcv">—</span></div>
+</fieldset>
+
+<fieldset><legend>Режим / теплоноситель</legend>
+ <div class="row"><select id="mode" style="width:100%">
+  <option value="potable">хозяйственно-питьевой водопровод жилых и общественных зданий</option>
+  <option value="combined">объединенный хоз-противопожарный жил. и общ.зданий или производственный</option>
+  <option value="prod-fire">объединенный производственный противопожарный водопровод</option>
+  <option value="fire">противопожарный водопровод</option>
+  <option value="dhw-supply">подающий или циркуляционный распределительный трубопровод</option>
+  <option value="dhw-tp">в пределах теплопункта или водоразборн. стояков с полотенцесушителями</option>
+  <option value="dhw-risers">водоразб. стояков без полотенцесушителей и циркуляционных стояков</option>
+ </select></div>
+ <div class="row">ν, м²/с: <input type="text" id="nu" value="1.3e-6" size="8">
+   <select id="nuPreset" size="1" style="width:150px">
+    <option value="">— справочно —</option>
+    <option value="1.3e-6|1000">t=10°C (1000 кг/м³)</option>
+    <option value="1.01e-6|999">t=20°C</option>
+    <option value="0.659e-6|988">t=40°C</option>
+    <option value="0.55e-6|990">t≈50°C</option>
+    <option value="0.47e-6|980">t≈60°C</option>
+    <option value="0.41e-6|980">t≈70°C</option>
+    <option value="0.36e-6|970">t≈80°C</option>
+   </select></div>
+ <div class="row">ρ, кг/м³: <input type="text" id="rho" value="1000" size="8">
+   <span class="hint">для ГВС рекомендуется t=60°C</span></div>
+</fieldset>
+</div>
+
+<div>
+<fieldset><legend>Участок</legend>
+ <div class="row">Расход Q: <input type="text" id="q" size="7">
+   <select id="qunit"><option value="ls">л/сек</option><option value="mh">м³/ч</option></select></div>
+ <div class="row">Длина L, м: <input type="text" id="len" size="7"></div>
+ <div class="row">k (местные сопр.): <input type="text" id="k" size="7" value="0"></div>
+ <div class="row"><button id="btnCalc">Расчёт</button>
+   <button id="btnHelp">Справка</button></div>
+</fieldset>
+
+<fieldset><legend>Результат</legend>
+ <div id="out">—</div>
+</fieldset>
+</div>
+</div>
+
+<div id="help"></div>
+<div class="footnote">
+Восстановлено реверс-инжинирингом по EXE (формулы и данные) и кн. Шевелев Ф.А. «Таблицы для
+гидравлического расчета водопроводных труб», 1984. Формулы — в «Справке».</div>
+</div>
+
+<!-- Порядок важен: формулы → данные → UI (классические скрипты: работает с file:// без сервера) -->
+<script src="js/formulas.js"></script>
+<script src="js/data.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>

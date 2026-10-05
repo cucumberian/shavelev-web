@@ -1,0 +1,20 @@
+/* Таблицы Шевелева — клон: стили (Win-classic) */
+body{font-family:"Segoe UI",Tahoma,sans-serif;font-size:13px;background:#ece9d8;margin:0}
+#app{width:660px;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
+h1{font-size:15px;margin:2px 0 8px;text-align:center}
+fieldset{border:1px solid #999;margin:6px 0;padding:6px;background:#f3f1e8}
+legend{font-weight:bold;padding:0 4px}
+label{display:inline-block}
+select,input[type=text]{font-size:13px;padding:1px 2px;border:1px solid #7f9db9;background:#fff}
+.row{margin:3px 0}
+.col2{display:flex;gap:12px}
+.col2>div{flex:1}
+#out{background:#fff;border:1px solid #7f9db9;padding:6px;min-height:90px;white-space:pre-wrap}
+.warn{color:#b00}
+.ok{color:#060}
+button{font-size:13px;padding:3px 14px;margin-right:6px}
+.hint{color:#555;font-size:11px}
+.fdoc{font-size:11px;color:#00c;cursor:pointer;text-decoration:underline}
+#help{background:#fff;border:1px solid #7f9db9;padding:8px;display:none;font-size:12px}
+#help i{font-family:Georgia,serif}
+.footnote{width:660px;margin:6px auto;font-size:11px;color:#444}

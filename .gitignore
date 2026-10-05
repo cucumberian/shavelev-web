@@ -1,0 +1,8 @@
+# не программа
+test/
+node_modules/
+package.json
+package-lock.json
+*.txt
+*.log
+.DS_Store
