@@ -2,6 +2,7 @@
 body{font-family:"Segoe UI",Tahoma,sans-serif;font-size:13px;background:#ece9d8;margin:0}
 #app{width:660px;max-width:100%;box-sizing:border-box;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
 h1{font-size:15px;margin:2px 0 8px;text-align:center}
+h1 .subtitle{font-weight:normal;font-size:11px}
 fieldset{border:1px solid #999;margin:6px 0;padding:6px;background:#f3f1e8}
 legend{font-weight:bold;padding:0 4px}
 label{display:inline-block}
@@ -26,8 +27,8 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .w-mode{width:100%}
 .w-nupreset{width:150px}
 
-/* ===== планшет/узкое окно: колонки в столбик ===== */
-@media (max-width:700px){
+/* ===== планшет/узкое окно: колонки в столбик (порог 820 — чтобы iPad-портрет 768 тоже складывался) ===== */
+@media (max-width:820px){
  .col2{flex-direction:column;gap:0}
  .w-material{width:100%}
  .w-nupreset{width:130px}
@@ -38,6 +39,7 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
  body{font-size:15px}                    /* читаемость без pinch-zoom */
  #app{margin:0;border:none;border-radius:0;padding:6px}
  h1{font-size:17px}
+ h1 .subtitle{font-size:13px}     /* подзаголовок — читаемый на телефоне */
  fieldset{margin:8px 0;padding:8px}
  legend{font-size:15px}
  select,input[type=text]{font-size:16px; /* <16px iOS зумит поле при фокусе */
