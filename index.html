@@ -44,9 +44,6 @@
  <div class="row full"><b>Система:</b>
    <label><input type="radio" name="sys" id="sysCold" value="cold" checked> холодного водоснабжения</label>
    <label><input type="radio" name="sys" id="sysHot" value="hot"> горячего водоснабжения</label></div>
- <div class="row full"><select id="mode" class="w-mode"></select></div>
- <div class="row"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
- <div class="row full"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
  <div class="row"><b>ν, м²/с:</b>
    <span class="ctl"><input type="text" id="nu" value="1.3e-6">
    <select id="nuPreset" size="1">
@@ -71,6 +68,9 @@
  <div class="row"><b>ρ, кг/м³:</b>
    <span class="ctl"><input type="text" id="rho" value="1000">
    <span class="hint">для ГВС рекомендуется t=60°C</span></span></div>
+ <div class="row full"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
+ <div class="row full"><select id="mode" class="w-mode"></select></div>
+ <div class="row"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
 </fieldset>
 </div>
 

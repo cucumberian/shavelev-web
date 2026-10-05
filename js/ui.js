@@ -238,7 +238,7 @@ function helpSteel(){
  // верх — как в справке оригинальной программы (frmtablII1 help, 0x50395): формулы «в столбик»
  const mathSteel=`<b>Справка — для стальных труб</b>
  <div class="math">
-  <div class="mrow"><span class="mlab">удельные потери напора на трение:</span>
+  <div class="mrow"><span class="mlab">гидравлический уклон:</span>
    <span><i>i</i> = ${fr('λ','<i>d</i><sub>п</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
   <div class="mrow"><span class="mlab">для новых стальных труб:</span>
    <span>λ = ${fr('0,312','<i>d</i><sub>п</sub><sup>0,226</sup>')} · <span class="grp">(1,9·10<sup>−6</sup> + ${fr('<span class="nu">ν</span>','<i>v</i>')})<sup>0,226</sup></span></span></div>
@@ -252,8 +252,8 @@ function helpSteel(){
    <div class="drow"><span class="dsym"><i>d</i><sub>п</sub></span><span>— расчётный внутренний диаметр, м;</span></div>
    <div class="drow"><span class="dsym"><i>d</i><sub>н</sub></span><span>— наружный диаметр трубы, мм;</span></div>
    <div class="drow"><span class="dsym"><i>s</i></span><span>— толщина стенки трубы, мм;</span></div>
-   <div class="drow"><span class="dsym"><i>i</i></span><span>— удельные потери напора на трение, м/м;</span></div>
-   <div class="drow"><span class="dsym">λ</span><span>— коэффициент трения;</span></div>
+   <div class="drow"><span class="dsym"><i>i</i></span><span>— гидравлический уклон;</span></div>
+   <div class="drow"><span class="dsym">λ</span><span>— коэффициент сопротивления трения по длине;</span></div>
    <div class="drow"><span class="dsym"><i>v</i></span><span>— средняя скорость потока, м/с;</span></div>
    <div class="drow"><span class="dsym"><span class="nu">ν</span></span><span>— кинематическая вязкость воды, м²/с;</span></div>
    <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,81 м/с² (2g = 19,62).</span></div>
@@ -279,7 +279,7 @@ function helpSteel(){
 function helpCI(){
  return `<b>Справка — для чугунных труб (ГОСТ 9583-75, ГОСТ 21053-75)</b>
  <div class="math">
-  <div class="mrow"><span class="mlab">удельные потери напора на трение:</span>
+  <div class="mrow"><span class="mlab">гидравлический уклон:</span>
    <span><i>i</i> = ${fr('λ','<i>d</i><sub>п</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
   <div class="mrow"><span class="mlab">для новых чугунных труб:</span>
    <span>λ = ${fr('0,0144','<i>d</i><sub>п</sub><sup>0,284</sup>')} · <span class="grp">(1 + ${fr('2,36','<i>v</i>')})<sup>0,284</sup></span></span></div>
@@ -289,8 +289,8 @@ function helpCI(){
    <span><i>i</i> = ${fr('0,000912·<i>v</i><sup>2</sup>','<i>d</i><sub>п</sub><sup>1,3</sup>')} · <span class="grp">(1 + ${fr('0,867','<i>v</i>')})<sup>0,3</sup></span></span></div>
   <div class="mdef"><b>где</b>
    <div class="drow"><span class="dsym"><i>d</i><sub>п</sub></span><span>— расчётный внутренний диаметр трубы, м;</span></div>
-   <div class="drow"><span class="dsym"><i>i</i></span><span>— удельные потери напора на трение, м/м;</span></div>
-   <div class="drow"><span class="dsym">λ</span><span>— коэффициент трения;</span></div>
+   <div class="drow"><span class="dsym"><i>i</i></span><span>— гидравлический уклон;</span></div>
+   <div class="drow"><span class="dsym">λ</span><span>— коэффициент сопротивления трения по длине;</span></div>
    <div class="drow"><span class="dsym"><i>v</i></span><span>— средняя скорость потока, м/с;</span></div>
    <div class="drow"><span class="dsym"><span class="nu">ν</span></span><span>— кинематическая вязкость воды, м²/с;</span></div>
    <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,81 м/с² (2g = 19,62).</span></div>
@@ -316,6 +316,7 @@ $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{const c=$('danother').checked;$('dcv').disabled=!c;if(!c)updDv();}; // как в программе: тот же инпут, disabled при авторасчёте
+$('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;if(!on)$('k').value='';}; // как в программе (FUN_00480b10): без местных сопротивлений k блокируется и очищается
 $('nuPreset').onchange=e=>{if(e.target.value){const[a,b]=e.target.value.split('|');$('nu').value=a;$('rho').value=b;}};
 $('mode').onchange=()=>{const kv=K_MODE[$('mode').value];if(kv!==undefined)$('k').value=String(kv);}; // k по режиму, как в программе
 $('sysCold').onchange=()=>{fillModes(false);$('mode').onchange();
