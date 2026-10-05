@@ -1,15 +1,15 @@
-/* Таблицы Шевелева — клон: стили (Win-classic) */
+/* Таблицы Шевелева — клон: стили (Win-classic) + адаптив под мобильные */
 body{font-family:"Segoe UI",Tahoma,sans-serif;font-size:13px;background:#ece9d8;margin:0}
-#app{width:660px;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
+#app{width:660px;max-width:100%;box-sizing:border-box;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
 h1{font-size:15px;margin:2px 0 8px;text-align:center}
 fieldset{border:1px solid #999;margin:6px 0;padding:6px;background:#f3f1e8}
 legend{font-weight:bold;padding:0 4px}
 label{display:inline-block}
-select,input[type=text]{font-size:13px;padding:1px 2px;border:1px solid #7f9db9;background:#fff}
+select,input[type=text]{font-size:13px;padding:1px 2px;border:1px solid #7f9db9;background:#fff;max-width:100%;box-sizing:border-box}
 .row{margin:3px 0}
 .col2{display:flex;gap:12px}
-.col2>div{flex:1}
-#out{background:#fff;border:1px solid #7f9db9;padding:6px;min-height:90px;white-space:pre-wrap}
+.col2>div{flex:1;min-width:0}
+#out{background:#fff;border:1px solid #7f9db9;padding:6px;min-height:90px;white-space:pre-wrap;overflow-wrap:break-word}
 .warn{color:#b00}
 .ok{color:#060}
 button{font-size:13px;padding:3px 14px;margin-right:6px}
@@ -17,4 +17,49 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .fdoc{font-size:11px;color:#00c;cursor:pointer;text-decoration:underline}
 #help{background:#fff;border:1px solid #7f9db9;padding:8px;display:none;font-size:12px}
 #help i{font-family:Georgia,serif}
-.footnote{width:660px;margin:6px auto;font-size:11px;color:#444}
+.footnote{width:660px;max-width:100%;box-sizing:border-box;margin:6px auto;font-size:11px;color:#444;padding:0 8px}
+
+/* ширины контролов (были inline в разметке) */
+.w-material{width:340px}
+.w-d{width:120px}
+.w-t{width:70px}
+.w-mode{width:100%}
+.w-nupreset{width:150px}
+
+/* ===== планшет/узкое окно: колонки в столбик ===== */
+@media (max-width:700px){
+ .col2{flex-direction:column;gap:0}
+ .w-material{width:100%}
+ .w-nupreset{width:130px}
+}
+
+/* ===== телефон ===== */
+@media (max-width:480px){
+ body{font-size:15px}                    /* читаемость без pinch-zoom */
+ #app{margin:0;border:none;border-radius:0;padding:6px}
+ h1{font-size:17px}
+ fieldset{margin:8px 0;padding:8px}
+ legend{font-size:15px}
+ select,input[type=text]{font-size:16px; /* <16px iOS зумит поле при фокусе */
+   padding:6px 4px;border-radius:3px}
+ button{font-size:16px;padding:10px 18px;border-radius:4px}
+ .row{margin:7px 0}
+ /* строки ввода: метка сверху, контрол на всю ширину */
+ .row>input[type=text],.row>select{display:block;width:100%;margin-top:3px}
+ .row>b,.row{display:block}
+ #thicknessRow>select,#mode,#material,#dsel,#tsel,#nuPreset{width:100%}
+ /* ν и ρ + их подписи: инпут и пресет в одну строку */
+ #nu,#rho{display:inline-block;width:38%}
+ #nuPreset{display:inline-block;width:60%}
+ #q{display:inline-block;width:45%}
+ #qunit{display:inline-block;width:53%}
+ #len,#k{display:block;width:100%}
+ label{display:inline-block;margin-right:12px;padding:4px 0}  /* крупные радиокнопки */
+ input[type=radio]{width:20px;height:20px;vertical-align:middle}
+ #out{font-size:15px;padding:10px;min-height:110px}
+ #help{font-size:14px;padding:10px}
+ .hint,.fdoc{font-size:13px}
+ .footnote{font-size:12px}
+ /* кнопки — на всю ширину, чтобы попадать пальцем */
+ #btnCalc,#btnHelp{width:100%;margin:4px 0 0}
+}
