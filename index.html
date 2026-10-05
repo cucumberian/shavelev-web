@@ -27,10 +27,14 @@
 </fieldset>
 
 <fieldset class="fields"><legend>Исходные данные</legend>
+ <div id="srcGrid">
+ <div id="srcLeft">
  <div class="row full" id="clsRow" style="display:none"><b>Класс:</b>
    <label><input type="radio" name="cls" value="ЛА" checked> ЛА</label>
    <label><input type="radio" name="cls" value="А"> А</label>
    <label><input type="radio" name="cls" value="Б"> Б</label></div>
+ </div>
+ <div id="srcRight">
  <div class="row"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
  <div class="row" id="thicknessRow" style="display:none"><b id="tLabel">Толщина стенки, мм:</b>
    <select id="tsel" class="w-t"></select></div>
@@ -38,14 +42,18 @@
    <span class="ctl"><input type="text" id="dcv" disabled>
    <label id="dpOther" style="display:none"><input type="checkbox" id="danother"> другой</label></span></div>
  <div class="row full"><span id="duLine"></span></div>
+ <div class="row full" id="ciDims" style="display:none"><span id="ciDimsLine"></span></div>
+ </div>
+ </div>
 </fieldset>
 
 <fieldset class="fields"><legend>Режим / теплоноситель</legend>
- <div class="row full"><b>Система:</b>
+ <div class="row full" id="sysRow"><b>Система:</b>
    <label><input type="radio" name="sys" id="sysCold" value="cold" checked> холодного водоснабжения</label>
    <label><input type="radio" name="sys" id="sysHot" value="hot"> горячего водоснабжения</label></div>
  <div class="row"><b>ν, м²/с:</b>
    <span class="ctl"><input type="text" id="nu" value="1.3e-6">
+   <span class="hint" id="nuT" style="display:none">t=10°C (как в программе)</span>
    <select id="nuPreset" size="1">
     <option value="">— справочно —</option>
     <option value="1.3e-6|1000">t=10°C (1000 кг/м³)</option>
@@ -67,10 +75,10 @@
    </select></span></div>
  <div class="row"><b>ρ, кг/м³:</b>
    <span class="ctl"><input type="text" id="rho" value="1000">
-   <span class="hint">для ГВС рекомендуется t=60°C</span></span></div>
- <div class="row full"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
- <div class="row full"><select id="mode" class="w-mode"></select></div>
- <div class="row"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
+   <span class="hint" id="rhoHint">для ГВС рекомендуется t=60°C</span></span></div>
+ <div class="row full" id="mestRow"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
+ <div class="row full" id="modeRow"><select id="mode" class="w-mode"></select></div>
+ <div class="row" id="kRow"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
 </fieldset>
 </div>
 
@@ -88,7 +96,7 @@
  <div id="out">—</div>
 </fieldset>
 
-<fieldset><legend>Потери напора на участке, м</legend>
+<fieldset><legend id="hLegend">Потери напора на участке, м</legend>
  <div id="outH">—</div>
 </fieldset>
 </div>

@@ -16,6 +16,7 @@ select,input[type=text]{font-size:13px;padding:1px 2px;border:1px solid #7f9db9;
 .ok{color:#060}
 button{font-size:13px;padding:3px 14px;margin-right:6px}
 .hint{color:#555;font-size:11px}
+.dimmed{opacity:.45} /* frmtablII3: при «другой» блок dн/S/dв заблокирован (серый), как в оригинале */
 .fdoc{font-size:11px;color:#00c}  /* ссылка на ГОСТ в программе открывала .doc — не гиперссылка, без подчёркивания */
 #help{background:#fff;border:1px solid #7f9db9;padding:8px;display:none;font-size:12px}
 #help i{font-family:Georgia,serif}
@@ -51,6 +52,8 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .fields .ctl{display:flex;gap:6px;align-items:center;min-width:0}
 .fields .ctl>input,.fields .ctl>select{flex:1 1 auto;min-width:0}
 .fields .ctl>.hint{flex:0 1 auto}
+/* чугун: исходные данные в две колонки — класс слева, остальное справа (как в frmtablII3) */
+#srcGrid.two{display:grid;grid-template-columns:max-content 1fr;column-gap:18px;align-items:start}
 #dcv{flex:1 1 70px;min-width:0}
 #qunit{flex:0 0 60px}
 #duLine{white-space:pre-line}
