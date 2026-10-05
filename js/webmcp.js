@@ -68,14 +68,7 @@ function setDiameter(dv){
   if(idx>=0 && $('dsel').options[idx]){
     $('dsel').value=$('dsel').options[idx].value; $('dsel').onchange(); return;
   }
-  // а/ц: dу из vt → первый вариант dв этого dу
-  if(m.vt){
-    const vt=m.vt.find(v=>v.du===dv);
-    if(vt){
-      const opt2=[...$('dsel').options].find(o=>o.textContent.includes('dу='+dv+' '));
-      if(opt2){ $('dsel').value=opt2.value; $('dsel').onchange(); return; }
-    }
-  }
+  // а/ц (frmtablII4): опции dsel = dу текущего ВТ/типа — dу уже найден общим поиском выше
   throw new Error('диаметр '+dv+' недоступен для текущего материала; доступны: '+[...$('dsel').options].map(o=>o.value).join(', '));
 }
 function setWall(s){
@@ -190,8 +183,8 @@ const TOOLS=[
         ci_new:'λ=0.0144·(1+2.36/v)^0.284/d^0.284',
         old_v_ge_1_2:'A=0.00107; e=1.3',
         old_v_lt_1_2:'A=0.000912·(1+0.867/v)^0.3; e=1.3',
-        asbes:'A=0.000561·(1+1.19/v)^0.190; e=1.19',
-        conc:'A=0.000802·(1+1.19/v)^0.190; e=1.19',
+        asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19',
+        conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19',
         plastic_grp_pex:'A=0.000685·(1+1.774/v)^0.226; e=1.226',
         glass:'A=0.000745·(1+1.774/v)^0.226; e=1.226'
       },

@@ -37,6 +37,8 @@ function applySysVisibility(){
  const ci=!!currentMat().cls;
  ['sysRow','mestRow','modeRow','kRow'].forEach(id=>$(id).style.display=ci?'none':'');
  $('srcGrid').classList.toggle('two',ci); // класс слева, остальное справа (грид только на чугуне)
+ $('sysField').style.display=currentMat().id==='asbes'?'none':''; // а/ц (frmtablII4): блока режим/теплоноситель в оригинале нет
+ $('wearField').style.display=currentMat().id==='asbes'?'none':''; // а/ц: переключателя новые/неновые в окне нет — формула справедлива для обоих (справка оригинала)
  $('nuT').style.display=ci?'':'none';
  $('rhoHint').style.display=ci?'none':'';
  if(ci){$('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';$('rho').disabled=true;}
@@ -46,6 +48,9 @@ function applySysVisibility(){
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
 function curCls(){const r=document.querySelector('input[name=cls]:checked');return r?r.value:'ЛА';}
+/* а/ц (frmtablII4): класс трубы ВТ и тип по размерам */
+function curVt(){const r=document.querySelector('input[name=vt]:checked');return r?r.value:'ВТ6';}
+function curTip(){const r=document.querySelector('input[name=tip]:checked');return r?+r.value:1;}
 
 /* Состояние блока исходных данных (frmtablII3, проверка на живой программе):
    «другой» свободен при любом классе/dу; при включении блокируется весь блок —
@@ -64,6 +69,7 @@ function fillDiameters(){
  const prev=sel.value;
  sel.innerHTML='';
  $('clsRow').style.display=m.cls?'':'none';
+ $('vtRow').style.display='none'; $('tipRow').style.display='none'; // селекторы а/ц — только на своей странице
  if(m.gas){
    // frmtablII1: dн → связанная стенка S → dp = dн − 2s − 1
    m.gas.dn.forEach(d=>{
@@ -80,10 +86,17 @@ function fillDiameters(){
    $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
    $('dpOther').style.display='';
  } else if(m.id==='asbes'){
-   m.vt.forEach(v=>v.items.forEach(it=>{
-     const o=document.createElement('option');
-     o.value=it[2]; o.textContent=`dу=${v.du} мм; труба ${it[0]} тип${it[1]}; dв=${it[2]} мм`;
-     sel.appendChild(o);}));
+   // frmtablII4 (скрин оригинала 05.10.2026): радио ВТ6–ВТ15 + комбо dу + радио «Тип 1–3»;
+   // dв — из таблицы ГОСТ 539-80 (пул подсказок 0x42e5c..0x44f5c). Тип 1 ⇒ ВТ15 недоступен (у ВТ15 только тип 2).
+   $('vtRow').style.display=''; $('tipRow').style.display='';
+   const t15=document.querySelector('input[name=vt][value="ВТ15"]');
+   t15.disabled=curTip()===1;
+   if(t15.disabled&&t15.checked)document.querySelector('input[name=vt][value="ВТ6"]').checked=true;
+   const vt=curVt(),tip=curTip();
+   m.vt.filter(v=>v.items.some(it=>it[0]===vt&&it[1]===tip)).forEach(v=>{
+    const o=document.createElement('option');
+    o.value=String(v.du); o.textContent=`dу=${v.du} мм`;
+    sel.appendChild(o);});
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
    $('thicknessRow').style.display='none';
  } else if(m.cls){
@@ -121,10 +134,14 @@ function fillDiameters(){
    $('tLabel').textContent='Толщина стенки, мм:';
    $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
    $('dpOther').style.display='';
- } else if(!m.gas){ // подписи строк — общие (для газовой страницы заданы выше)
+ } else if(m.id==='asbes'){ // frmtablII4: dу + dв + «Другой» (помогает флажок из справки)
+   $('dLabel').textContent='Условный проход dу, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dp, мм:';
+   $('dpOther').style.display='';
+  } else if(!m.gas){ // подписи строк — общие (для газовой страницы заданы выше)
    $('dLabel').textContent='Диаметр:';
    $('tLabel').textContent='Толщина стенки, мм:';
-   $('dvLabel').innerHTML='Расчётный d<sub>в</sub>, мм:';
+   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
    $('dpOther').style.display='none';
  }
  updDv();
@@ -148,7 +165,7 @@ function findDByDv(m,dv){
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls) && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.id==='asbes') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -197,7 +214,14 @@ function curDv(){
    const dv=t[0]-2*t[1];
    return dv-(dv<=300 && document.querySelector('input[name=wear]:checked').value==='old'?1:0);
  }
- return parseFloat($('dsel').value);
+ if(m.id==='asbes'){ // frmtablII4: dв из таблицы (ВТ,тип,dу); «Другой» — ручной ввод
+   if($('danother').checked) return numStrict($('dcv').value);
+   const du=+$('dsel').value,vt=curVt(),tip=curTip();
+   const row=m.vt.find(v=>v.du===du);
+   const it=row&&row.items.find(x=>x[0]===vt&&x[1]===tip);
+   return it?it[2]:NaN;
+  }
+  return parseFloat($('dsel').value);
 }
 
 function calc(){
@@ -215,8 +239,9 @@ function calc(){
  if(L===0){out.innerHTML='<span class="warn">Длина участка не может равняться нулю!</span>';return;}
  const m=currentMat();
  const ci=!!m.cls; // frmtablII3: k и местных сопротивлений нет — k≡0, H=i·L (FUN_004ae2c0)
- let k=ci?0:(numStrict($('k').value)||0);
- if(!ci){
+ const nomisc=ci||m.id==='asbes'; // frmtablII4 (а/ц): locals/k в окне нет, h=i·L (скрин 05.10.2026)
+ let k=nomisc?0:(numStrict($('k').value)||0);
+ if(!nomisc){
   if(k<0){out.innerHTML='<span class="warn">коэффициент местных сопротивлений k не может быть отрицательным!</span>';return;}
   if(!$('chkMest').checked) k=0; // «учесть потери на местные сопротивления» выключен — k не применяется
  }
@@ -236,8 +261,8 @@ function calc(){
  lines.push(`удельные потери давления R = ${fmt(R,1)} Па/м`);
  // блок «Потери напора…» — как в программе: чугун (Frame4 «по длине») H=i·L без k; прочие — i·L·(1+k)
  $('hLegend').textContent=ci?'Потери напора по длине, м':'Потери напора на участке, м';
- $('outH').innerHTML=(ci?[]:[`k = ${fmt(k,2)}`]).concat(
-   [`Потери напора ${ci?'по длине':'на участке'} H = i·L${ci?'':'·(1+k)'} = ${fmt(H,3)} м`,
+ $('outH').innerHTML=(nomisc?[]:[`k = ${fmt(k,2)}`]).concat(
+   [`Потери напора ${ci?'по длине':'на участке'} H = i·L${nomisc?'':'·(1+k)'} = ${fmt(H,3)} м`,
     `потери давления = ${fmt(R*L*(1+k),0)} Па`]).join('\n');
  const cls=[];
  if(ci){ // frmtablII3 (FUN_004ae2c0): пары порогов 0,8…2 / 1…3 / 1,5…4 по диаметру (живая программа 05.10.2026):
@@ -271,7 +296,7 @@ const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="f
 function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
- h.innerHTML = currentMat().id==='ci' ? helpCI() : helpSteel();
+ h.innerHTML = currentMat().id==='ci' ? helpCI() : (currentMat().id==='asbes' ? helpAsbes() : helpSteel());
  h.style.display='block';
 }
 /* Справка стальной страницы — как в оригинальной программе (frmtablII1 help, 0x50395) */
@@ -280,17 +305,17 @@ function helpSteel(){
  const mathSteel=`<b>Справка — для стальных труб</b>
  <div class="math">
   <div class="mrow"><span class="mlab">гидравлический уклон:</span>
-   <span><i>i</i> = ${fr('λ','<i>d</i><sub>п</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
+   <span><i>i</i> = ${fr('λ','<i>d</i><sub>p</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
   <div class="mrow"><span class="mlab">для новых стальных труб:</span>
-   <span>λ = ${fr('0,312','<i>d</i><sub>п</sub><sup>0,226</sup>')} · <span class="grp">(1,9·10<sup>−6</sup> + ${fr('<span class="nu">ν</span>','<i>v</i>')})<sup>0,226</sup></span></span></div>
+   <span>λ = ${fr('0,312','<i>d</i><sub>p</sub><sup>0,226</sup>')} · <span class="grp">(1,9·10<sup>−6</sup> + ${fr('<span class="nu">ν</span>','<i>v</i>')})<sup>0,226</sup></span></span></div>
   <div class="mrow"><span class="mlab">для неновых стальных труб при <i>v</i>/<span class="nu">ν</span> ≥ 9,2·10<sup>5</sup> 1/м:</span>
-   <span>λ = ${fr('0,021','<i>d</i><sub>п</sub><sup>0,3</sup>')}</span></div>
+   <span>λ = ${fr('0,021','<i>d</i><sub>p</sub><sup>0,3</sup>')}</span></div>
   <div class="mrow"><span class="mlab">то же при <i>v</i>/<span class="nu">ν</span> &lt; 9,2·10<sup>5</sup> 1/м:</span>
-   <span>λ = ${fr('<span class="grp">(1,5·10<sup>−6</sup> + '+fr('<span class="nu">ν</span>','<i>v</i>')+')</span><sup>0,3</sup>','<i>d</i><sub>п</sub><sup>0,3</sup>')}</span></div>
+   <span>λ = ${fr('<span class="grp">(1,5·10<sup>−6</sup> + '+fr('<span class="nu">ν</span>','<i>v</i>')+')</span><sup>0,3</sup>','<i>d</i><sub>p</sub><sup>0,3</sup>')}</span></div>
   <div class="mrow"><span class="mlab">расчётный внутренний диаметр:</span>
-   <span><i>d</i><sub>п</sub> = <i>d</i><sub>н</sub> − 2<i>s</i> − 1</span></div>
+   <span><i>d</i><sub>p</sub> = <i>d</i><sub>н</sub> − 2<i>s</i> − 1</span></div>
   <div class="mdef"><b>где</b>
-   <div class="drow"><span class="dsym"><i>d</i><sub>п</sub></span><span>— расчётный внутренний диаметр, м;</span></div>
+   <div class="drow"><span class="dsym"><i>d</i><sub>p</sub></span><span>— расчётный внутренний диаметр, м;</span></div>
    <div class="drow"><span class="dsym"><i>d</i><sub>н</sub></span><span>— наружный диаметр трубы, мм;</span></div>
    <div class="drow"><span class="dsym"><i>s</i></span><span>— толщина стенки трубы, мм;</span></div>
    <div class="drow"><span class="dsym"><i>i</i></span><span>— гидравлический уклон;</span></div>
@@ -299,7 +324,7 @@ function helpSteel(){
    <div class="drow"><span class="dsym"><span class="nu">ν</span></span><span>— кинематическая вязкость воды, м²/с;</span></div>
    <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,81 м/с² (2g = 19,62).</span></div>
   </div>
-  <div class="hint">1 мм в формуле d<sub>п</sub> — толщина слоя коррозии и отложений на стенках.</div>
+  <div class="hint">1 мм в формуле d<sub>p</sub> — толщина слоя коррозии и отложений на стенках.</div>
  </div>`;
  return mathSteel+`<hr>
  <b>Расчётные формулы (кн. Шевелева 1984; программа реализует ν-подставленные варианты)</b><br>
@@ -308,10 +333,10 @@ function helpSteel(){
  <b>Новые чугунные</b> (3а): λ = 0,0144·(1 + 2,36/v)<sup>0,284</sup> / d<sup>0,284</sup><br>
  <b>Неновые ст./чуг.</b> (6) при v≥1,2: A = 0,021/(19,62·d<sup>0,3</sup>); <span class="hint">в программе A = 0,021/19,62 = 0,0010703…; коэффициент 0,00107 в книге — округление (расходится с программой на ≈0,03%)</span>&nbsp;
  (7) при v&lt;1,2: A = 0,000912·(1 + 0,867/v)<sup>0,3</sup> / d<sup>0,3</sup><br>
- <b>Асбестоцемент</b> (17): A = 0,000561·(1 + 1,19/v)<sup>0,190</sup> / d<sup>0,190</sup><br>
- <b>Железобетон</b> (22): A = 0,000802·(1 + 1,19/v)<sup>0,190</sup> / d<sup>0,190</sup> (×1,43 от а/ц)<br>
- <b>Пластик</b>: A = 0,000685·(1 + 1,774/v)<sup>0,226</sup> / d<sup>0,226</sup>;
- <b>Стекло</b>: A = 0,000745·(1 + 1,774/v)<sup>0,226</sup> / d<sup>0,226</sup><br>
+ <b>Асбестоцемент</b> (17): A = 0,000561·(1 + 3,51/v)<sup>0,190</sup> / d<sup>1,190</sup><br>
+ <b>Железобетон</b> (22): A = 0,000802·(1 + 3,51/v)<sup>0,190</sup> / d<sup>1,190</sup> (×1,43 от а/ц)<br>
+ <b>Пластик</b> (8): i = 0,000685·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup>;
+ <b>Стекло</b> (9): i = 0,000745·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup> — не A·v²/d<sup>e</sup>, степень у v своя<br>
  <span class="hint">ν воды = 1,3·10⁻⁶ м²/с (t=10°C); пороги: 1,2 м/с = 9,2·10⁵·ν; d в метрах.</span>`;
 }
 
@@ -321,15 +346,15 @@ function helpCI(){
  return `<b>Справка — для чугунных труб (ГОСТ 9583-75, ГОСТ 21053-75)</b>
  <div class="math">
   <div class="mrow"><span class="mlab">гидравлический уклон:</span>
-   <span><i>i</i> = ${fr('λ','<i>d</i><sub>п</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
+   <span><i>i</i> = ${fr('λ','<i>d</i><sub>p</sub>')} · ${fr('<i>v</i><sup>2</sup>','2<i>g</i>')}</span></div>
   <div class="mrow"><span class="mlab">для новых чугунных труб:</span>
-   <span>λ = ${fr('0,0144','<i>d</i><sub>п</sub><sup>0,284</sup>')} · <span class="grp">(1 + ${fr('2,36','<i>v</i>')})<sup>0,284</sup></span></span></div>
+   <span>λ = ${fr('0,0144','<i>d</i><sub>p</sub><sup>0,284</sup>')} · <span class="grp">(1 + ${fr('2,36','<i>v</i>')})<sup>0,284</sup></span></span></div>
   <div class="mrow"><span class="mlab">для неновых чугунных труб при <i>v</i> &gt; 1,2 м/с или <i>v</i> = 1,2 м/с:</span>
-   <span><i>i</i> = ${fr('0,00107·<i>v</i><sup>2</sup>','<i>d</i><sub>п</sub><sup>1,3</sup>')}</span></div>
+   <span><i>i</i> = ${fr('0,00107·<i>v</i><sup>2</sup>','<i>d</i><sub>p</sub><sup>1,3</sup>')}</span></div>
   <div class="mrow"><span class="mlab">то же при <i>v</i> &lt; 1,2 м/с:</span>
-   <span><i>i</i> = ${fr('0,000912·<i>v</i><sup>2</sup>','<i>d</i><sub>п</sub><sup>1,3</sup>')} · <span class="grp">(1 + ${fr('0,867','<i>v</i>')})<sup>0,3</sup></span></span></div>
+   <span><i>i</i> = ${fr('0,000912·<i>v</i><sup>2</sup>','<i>d</i><sub>p</sub><sup>1,3</sup>')} · <span class="grp">(1 + ${fr('0,867','<i>v</i>')})<sup>0,3</sup></span></span></div>
   <div class="mdef"><b>где</b>
-   <div class="drow"><span class="dsym"><i>d</i><sub>п</sub></span><span>— расчётный внутренний диаметр трубы, м;</span></div>
+   <div class="drow"><span class="dsym"><i>d</i><sub>p</sub></span><span>— расчётный внутренний диаметр трубы, м;</span></div>
    <div class="drow"><span class="dsym"><i>i</i></span><span>— гидравлический уклон;</span></div>
    <div class="drow"><span class="dsym">λ</span><span>— коэффициент сопротивления трения по длине;</span></div>
    <div class="drow"><span class="dsym"><i>v</i></span><span>— средняя скорость потока, м/с;</span></div>
@@ -351,11 +376,25 @@ function helpCI(){
   <span class="hint">ν воды = 1,3·10⁻⁶ м²/с (t=10°C); порог 1,2 м/с = 9,2·10⁵·ν; d в метрах.</span>`;
 }
 
+/* Справка страницы а/ц (help-форма frmtablII4, CP1251-строки EXE 0x4c7ae..0x4d000) — формула и
+   тексты дословно из оригинала (включая оригинальные «асбетоцементных» и «неновых») */
+function helpAsbes(){
+ return `<b>асбестоцементные трубы ГОСТ 539-80</b><hr>
+  Для гидравлического расчета асбестоцементных труб используют формулу:<br>
+  <i>i</i>&nbsp;=&nbsp;0,000561·${fr('v<sup>2</sup>','dp<sup>1,190</sup>')}·(1&nbsp;+&nbsp;${fr('3,51','dp')})<sup>0,190</sup><br>
+  <i>i</i> – гидравлический уклон;&nbsp; <i>v</i> – скорость движения воды, м/с;&nbsp; dp – расчетный внутренний диаметр, м.<br><br>
+  Как показал опыт эксплуатации асбетоцементных водопроводных труб, заметного возрастания их шероховатости обычно не происходит.
+  Благодаря этому приведенная выше формула справедлива для расчета как новых, так и неновых водопроводных труб.<br><br>
+  Величины внутренних диаметров приняты по ГОСТ 539-80. При расчете нестандартных асбестоцементных труб установите флажок
+  "другой" диаметр и в окно ввода введите соответствующее значение расчетного внутреннего диаметра.`;
+}
+
 /* ==== init ==== */
 fillMaterials();
 $('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!m.cls)$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
+document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();}; // как в программе: при «другой» dp-инпут редактируем, блок dу/классов/dн-S-dв блокируется
 document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм только у «неновых» (VarCmpLe(dв,300) And Option1)

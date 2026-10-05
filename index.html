@@ -19,7 +19,7 @@
 
 <div class="col2">
 <div>
-<fieldset><legend>Трубы</legend>
+<fieldset id="wearField"><legend>Трубы</legend>
  <div class="row">
   <label><input type="radio" name="wear" value="new"> новые</label>
   <label><input type="radio" name="wear" value="old" checked> неновые</label>
@@ -35,10 +35,19 @@
    <label><input type="radio" name="cls" value="Б"> Б</label></div>
  </div>
  <div id="srcRight">
+ <div class="row full" id="vtRow" style="display:none"><b>Условный проход, мм:</b>
+   <label><input type="radio" name="vt" value="ВТ6" checked> ВТ6</label>
+   <label><input type="radio" name="vt" value="ВТ9"> ВТ9</label>
+   <label><input type="radio" name="vt" value="ВТ12"> ВТ12</label>
+   <label><input type="radio" name="vt" value="ВТ15"> ВТ15</label></div>
  <div class="row"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
+ <div class="row full" id="tipRow" style="display:none"><b>Тип труб по размерам:</b>
+   <label><input type="radio" name="tip" value="1" checked> Тип 1</label>
+   <label><input type="radio" name="tip" value="2"> Тип 2</label>
+   <label><input type="radio" name="tip" value="3"> Тип 3</label></div>
  <div class="row" id="thicknessRow" style="display:none"><b id="tLabel">Толщина стенки, мм:</b>
    <select id="tsel" class="w-t"></select></div>
- <div class="row" id="dcalcRow"><span id="dvLabel">Расчётный d<sub>в</sub>, мм:</span>
+ <div class="row" id="dcalcRow"><span id="dvLabel">Расчётный внутренний диаметр dp, мм:</span>
    <span class="ctl"><input type="text" id="dcv" disabled>
    <label id="dpOther" style="display:none"><input type="checkbox" id="danother"> другой</label></span></div>
  <div class="row full"><span id="duLine"></span></div>
@@ -47,7 +56,7 @@
  </div>
 </fieldset>
 
-<fieldset class="fields"><legend>Режим / теплоноситель</legend>
+<fieldset class="fields" id="sysField"><legend>Режим / теплоноситель</legend>
  <div class="row full" id="sysRow"><b>Система:</b>
    <label><input type="radio" name="sys" id="sysCold" value="cold" checked> холодного водоснабжения</label>
    <label><input type="radio" name="sys" id="sysHot" value="hot"> горячего водоснабжения</label></div>
