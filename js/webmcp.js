@@ -52,6 +52,13 @@ function setWear(w){
   if(w!=='new'&&w!=='old') throw new Error('wear должен быть new или old');
   document.querySelector(`input[name=wear][value=${w}]`).checked=true;
 }
+function setPipeClass(c){
+  const m=currentMat();
+  if(!m.cls) throw new Error('классы (ЛА/А/Б) есть только у чугунных труб');
+  const r=document.querySelector(`input[name=cls][value="${c}"]`);
+  if(!r) throw new Error('класс должен быть ЛА, А или Б');
+  r.checked=true; applyClsState(); fillDiameters();
+}
 function setDiameter(dv){
   const m=currentMat();
   const opt=[...$('dsel').options].find(o=>parseFloat(o.value)===dv);
@@ -105,9 +112,10 @@ const TOOLS=[
     return textResult({
       materials:MATERIALS.map(m=>({
         id:m.id,name:m.name,
-        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.gas? m.gas.dn : m.d),
+        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.gas? m.gas.dn : (m.cls? [...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b) : m.d)),
         has_wall_thickness:!!(m.wall||m.gas),
-        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.dvSame?'dв=d':'dв указан в dv'))
+        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.dvSame?'dв=d':(m.cls?'dу из класса (ЛА 65…300, А 350…1000, Б — все, dp вручную); dp=dр, у ЛА dу<300: dв−1 мм':'dв указан в dv'))),
+        pipe_classes:m.cls?Object.keys(m.cls):undefined
       })),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
       units:['ls (л/с)','mh (м³/ч)']
@@ -120,6 +128,7 @@ const TOOLS=[
   inputSchema:{type:'object',properties:{
     material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, conc, grp, glass, pex, metal-pex)'},
     wear:{type:'string',enum:['new','old'],description:'новые/неновые трубы'},
+    pipe_class:{type:'string',enum:['ЛА','А','Б'],description:'класс чугунной трубы (только ci): ЛА dу 65…300, А dу 350…1000, Б — dp вводит пользователь (diameters=все dу)'},
     diameter_mm:{type:'number',description:'выбранный диаметр из списка материала (dу/dн/du, мм)'},
     wall_mm:{type:'number',description:'толщина стенки мм (стальные gas/электросварные steel-es)'},
     mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers'},
@@ -128,6 +137,7 @@ const TOOLS=[
   }},
   async execute(a){
     if(a.material!==undefined) selectMaterial(a.material);
+    if(a.pipe_class!==undefined) setPipeClass(a.pipe_class);
     if(a.wear!==undefined) setWear(a.wear);
     if(a.diameter_mm!==undefined) setDiameter(a.diameter_mm);
     if(a.wall_mm!==undefined) setWall(a.wall_mm);
@@ -142,6 +152,7 @@ const TOOLS=[
     if(a.nu!==undefined){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
     if(a.rho!==undefined){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
     return textResult({ok:true,material:currentMat().id,wear:document.querySelector('input[name=wear]:checked').value,
+      pipe_class:currentMat().cls?curCls():undefined,
       dv_mm:$('dcv').value,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value});
   }
  },

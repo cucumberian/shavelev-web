@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Таблицы Шевелева — клон</title>
+<link rel="icon" type="image/x-icon" href="shev.ico"><!-- иконка извлечена из shev.exe (RT_GROUP_ICON id=1) -->
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -26,6 +27,10 @@
 </fieldset>
 
 <fieldset class="fields"><legend>Исходные данные</legend>
+ <div class="row full" id="clsRow" style="display:none"><b>Класс:</b>
+   <label><input type="radio" name="cls" value="ЛА" checked> ЛА</label>
+   <label><input type="radio" name="cls" value="А"> А</label>
+   <label><input type="radio" name="cls" value="Б"> Б</label></div>
  <div class="row"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
  <div class="row" id="thicknessRow" style="display:none"><b id="tLabel">Толщина стенки, мм:</b>
    <select id="tsel" class="w-t"></select></div>
@@ -48,11 +53,20 @@
     <option value="">— справочно —</option>
     <option value="1.3e-6|1000">t=10°C (1000 кг/м³)</option>
     <option value="1.01e-6|999">t=20°C</option>
-    <option value="0.659e-6|988">t=40°C</option>
-    <option value="0.55e-6|990">t≈50°C</option>
-    <option value="0.47e-6|980">t≈60°C</option>
-    <option value="0.41e-6|980">t≈70°C</option>
-    <option value="0.36e-6|970">t≈80°C</option>
+    <!-- ГВС: t=40…95, шаг 5 (диапазон программы); ρ/ν — приложение кн. Шевелевых,
+         совпадают с пресетами EXE (990/0,55≈50°, 980/0,47≈60°, 0,41≈70°, 970/0,36≈80°) -->
+    <option value="0.659e-6|992.2">t=40°C (992 кг/м³)</option>
+    <option value="0.605e-6|990.2">t=45°C</option>
+    <option value="0.556e-6|988">t=50°C</option>
+    <option value="0.512e-6|985.7">t=55°C</option>
+    <option value="0.474e-6|983.2">t=60°C</option>
+    <option value="0.44e-6|980.5">t=65°C</option>
+    <option value="0.412e-6|977.8">t=70°C</option>
+    <option value="0.387e-6|974.8">t=75°C</option>
+    <option value="0.364e-6|971.8">t=80°C</option>
+    <option value="0.344e-6|968.6">t=85°C</option>
+    <option value="0.326e-6|965.3">t=90°C</option>
+    <option value="0.309e-6|961.9">t=95°C</option>
    </select></span></div>
  <div class="row"><b>ρ, кг/м³:</b>
    <span class="ctl"><input type="text" id="rho" value="1000">
