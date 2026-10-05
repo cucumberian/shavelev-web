@@ -73,14 +73,14 @@ function setDiameter(dv){
 }
 function setWall(s){
   const m=currentMat();
-  if(!m.wall) throw new Error('у текущего материала нет выбора стенки');
+  if(!m.wall&&!m.gas) throw new Error('у текущего материала нет выбора стенки');
   const opt=[...$('tsel').options].find(o=>parseFloat(o.value)===s);
   if(!opt) throw new Error('толщина стенки '+s+' недоступна; доступны: '+[...$('tsel').options].map(o=>o.value).join(', '));
   $('tsel').value=opt.value; $('tsel').onchange();
 }
 function readResult(){
-  // парсим блок вывода в структурированный объект
-  const t=$('out').textContent;
+  // парсим блок вывода в структурированный объект (расчёт + потери напора)
+  const t=$('out').textContent+'\n'+$('outH').textContent;
   const num=(re)=>{const m=t.match(re);return m?parseFloat(m[1].replace(',','.')):null;};
   return {
     v_ms:num(/Скорость v = ([-\d,]+) м\/с/),
@@ -88,7 +88,7 @@ function readResult(){
     R_Pa_per_m:num(/R = ([-\d,]+) Па\/м/),
     H_m:num(/H = i·L·\(1\+k\) = ([-\d,]+) м/),
     dP_Pa:num(/потери давления = ([-\d,]+) Па/),
-    dv_mm:parseFloat($('dcv').textContent.replace(',','.'))||null,
+    dv_mm:parseFloat($('dcv').value.replace(',','.'))||null,
     warnings:(t.match(/Внимание![^\n]*|Малая скорость![^\n]*/g)||[]),
     recommendation:(t.match(/[^\n]*(?:экономически обосновано|рекомендуется использовать трубу)[^\n]*/)||[null])[0],
     raw:t
@@ -105,9 +105,9 @@ const TOOLS=[
     return textResult({
       materials:MATERIALS.map(m=>({
         id:m.id,name:m.name,
-        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : m.d,
-        has_wall_thickness:!!m.wall,
-        dv_note:m.wall?'dв=dн−2s, задавай wall_mm':(m.dvSame?'dв=d':'dв указан в dv')
+        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.gas? m.gas.dn : m.d),
+        has_wall_thickness:!!(m.wall||m.gas),
+        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.dvSame?'dв=d':'dв указан в dv'))
       })),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
       units:['ls (л/с)','mh (м³/ч)']
@@ -121,7 +121,7 @@ const TOOLS=[
     material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, conc, grp, glass, pex, metal-pex)'},
     wear:{type:'string',enum:['new','old'],description:'новые/неновые трубы'},
     diameter_mm:{type:'number',description:'выбранный диаметр из списка материала (dу/dн/du, мм)'},
-    wall_mm:{type:'number',description:'толщина стенки мм (только электросварные steel-es)'},
+    wall_mm:{type:'number',description:'толщина стенки мм (стальные gas/электросварные steel-es)'},
     mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers'},
     nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6)'},
     rho:{type:'number',description:'плотность, кг/м³'}
@@ -133,12 +133,16 @@ const TOOLS=[
     if(a.wall_mm!==undefined) setWall(a.wall_mm);
     if(a.mode!==undefined){
       if(!VEL_LIMIT[a.mode]) throw new Error('неизвестный режим: '+a.mode);
+      const wantHot=MODE_SYS.hot.includes(a.mode);
+      const r=document.querySelector('input[name=sys][value='+(wantHot?'hot':'cold')+']');
+      if(r.checked!==wantHot){r.checked=true;fillModes(false);}
       $('mode').value=a.mode;
+      const kv=K_MODE[a.mode]; if(kv!==undefined) $('k').value=String(kv);
     }
     if(a.nu!==undefined){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
     if(a.rho!==undefined){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
     return textResult({ok:true,material:currentMat().id,wear:document.querySelector('input[name=wear]:checked').value,
-      dv_mm:$('dcv').textContent,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value});
+      dv_mm:$('dcv').value,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value});
   }
  },
  {

@@ -8,39 +8,43 @@
 </head>
 <body>
 <div id="app">
-<h1>Таблицы Шевелева <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span></h1>
+<h1><span>Таблицы Шевелева</span> <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span></h1>
 
 <fieldset><legend>Материал труб</legend>
  <div class="row"><b>Комбинация труб:</b>
   <select id="material" class="w-material"></select>
   <span class="fdoc" id="gostLink"></span></div>
- <div class="row"><b>Состояние:</b>
-  <label><input type="radio" name="wear" value="new" checked> новые</label>
-  <label><input type="radio" name="wear" value="old"> неновые</label>
-  <span class="hint">(неновые: стальные и чугунные)</span></div>
 </fieldset>
 
 <div class="col2">
 <div>
-<fieldset><legend>Труба</legend>
- <div class="row">Диаметр: <select id="dsel" class="w-d"></select></div>
- <div class="row" id="thicknessRow" style="display:none">Толщина стенки, мм:
-   <select id="tsel" class="w-t"></select></div>
- <div class="row" id="dcalcRow">Расчётный d<sub>в</sub>, мм: <span id="dcv">—</span></div>
+<fieldset><legend>Трубы</legend>
+ <div class="row">
+  <label><input type="radio" name="wear" value="new"> новые</label>
+  <label><input type="radio" name="wear" value="old" checked> неновые</label>
+  <span class="hint">(неновые: стальные и чугунные)</span></div>
 </fieldset>
 
-<fieldset><legend>Режим / теплоноситель</legend>
- <div class="row"><select id="mode" class="w-mode">
-  <option value="potable">хозяйственно-питьевой водопровод жилых и общественных зданий</option>
-  <option value="combined">объединенный хоз-противопожарный жил. и общ.зданий или производственный</option>
-  <option value="prod-fire">объединенный производственный противопожарный водопровод</option>
-  <option value="fire">противопожарный водопровод</option>
-  <option value="dhw-supply">подающий или циркуляционный распределительный трубопровод</option>
-  <option value="dhw-tp">в пределах теплопункта или водоразборн. стояков с полотенцесушителями</option>
-  <option value="dhw-risers">водоразб. стояков без полотенцесушителей и циркуляционных стояков</option>
- </select></div>
- <div class="row">ν, м²/с: <input type="text" id="nu" value="1.3e-6" size="8">
-   <select id="nuPreset" size="1" class="w-nupreset">
+<fieldset class="fields"><legend>Исходные данные</legend>
+ <div class="row"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
+ <div class="row" id="thicknessRow" style="display:none"><b id="tLabel">Толщина стенки, мм:</b>
+   <select id="tsel" class="w-t"></select></div>
+ <div class="row" id="dcalcRow"><span id="dvLabel">Расчётный d<sub>в</sub>, мм:</span>
+   <span class="ctl"><input type="text" id="dcv" disabled>
+   <label id="dpOther" style="display:none"><input type="checkbox" id="danother"> другой</label></span></div>
+ <div class="row full"><span id="duLine"></span></div>
+</fieldset>
+
+<fieldset class="fields"><legend>Режим / теплоноситель</legend>
+ <div class="row full"><b>Система:</b>
+   <label><input type="radio" name="sys" id="sysCold" value="cold" checked> холодного водоснабжения</label>
+   <label><input type="radio" name="sys" id="sysHot" value="hot"> горячего водоснабжения</label></div>
+ <div class="row full"><select id="mode" class="w-mode"></select></div>
+ <div class="row"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
+ <div class="row full"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
+ <div class="row"><b>ν, м²/с:</b>
+   <span class="ctl"><input type="text" id="nu" value="1.3e-6">
+   <select id="nuPreset" size="1">
     <option value="">— справочно —</option>
     <option value="1.3e-6|1000">t=10°C (1000 кг/м³)</option>
     <option value="1.01e-6|999">t=20°C</option>
@@ -49,24 +53,29 @@
     <option value="0.47e-6|980">t≈60°C</option>
     <option value="0.41e-6|980">t≈70°C</option>
     <option value="0.36e-6|970">t≈80°C</option>
-   </select></div>
- <div class="row">ρ, кг/м³: <input type="text" id="rho" value="1000" size="8">
-   <span class="hint">для ГВС рекомендуется t=60°C</span></div>
+   </select></span></div>
+ <div class="row"><b>ρ, кг/м³:</b>
+   <span class="ctl"><input type="text" id="rho" value="1000">
+   <span class="hint">для ГВС рекомендуется t=60°C</span></span></div>
 </fieldset>
 </div>
 
 <div>
-<fieldset><legend>Участок</legend>
- <div class="row">Расход Q: <input type="text" id="q" size="7">
-   <select id="qunit"><option value="ls">л/сек</option><option value="mh">м³/ч</option></select></div>
- <div class="row">Длина L, м: <input type="text" id="len" size="7"></div>
- <div class="row">k (местные сопр.): <input type="text" id="k" size="7" value="0"></div>
- <div class="row"><button id="btnCalc">Расчёт</button>
+<fieldset class="fields"><legend>Участок</legend>
+ <div class="row"><b>Расход Q:</b>
+   <span class="ctl"><input type="text" id="q">
+   <select id="qunit"><option value="ls">л/сек</option><option value="mh">м³/ч</option></select></span></div>
+ <div class="row"><b>Длина L, м:</b> <input type="text" id="len"></div>
+ <div class="row full"><button id="btnCalc">Расчёт</button>
    <button id="btnHelp">Справка</button></div>
 </fieldset>
 
-<fieldset><legend>Результат</legend>
+<fieldset><legend>Расчёт</legend>
  <div id="out">—</div>
+</fieldset>
+
+<fieldset><legend>Потери напора на участке, м</legend>
+ <div id="outH">—</div>
 </fieldset>
 </div>
 </div>

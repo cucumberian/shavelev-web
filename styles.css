@@ -1,6 +1,6 @@
 /* Таблицы Шевелева — клон: стили (Win-classic) + адаптив под мобильные */
 body{font-family:"Segoe UI",Tahoma,sans-serif;font-size:13px;background:#ece9d8;margin:0}
-#app{width:660px;max-width:100%;box-sizing:border-box;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
+#app{width:1024px;max-width:100%;box-sizing:border-box;margin:10px auto;background:#ece9d8;border:2px outset #fff;padding:8px}
 h1{font-size:15px;margin:2px 0 8px;text-align:center}
 h1 .subtitle{font-weight:normal;font-size:11px}
 fieldset{border:1px solid #999;margin:6px 0;padding:6px;background:#f3f1e8}
@@ -10,15 +10,30 @@ select,input[type=text]{font-size:13px;padding:1px 2px;border:1px solid #7f9db9;
 .row{margin:3px 0}
 .col2{display:flex;gap:12px}
 .col2>div{flex:1;min-width:0}
-#out{background:#fff;border:1px solid #7f9db9;padding:6px;min-height:90px;white-space:pre-wrap;overflow-wrap:break-word}
+#out,#outH{background:#fff;border:1px solid #7f9db9;padding:6px;min-height:90px;white-space:pre-wrap;overflow-wrap:break-word}
+#outH{min-height:54px}
 .warn{color:#b00}
 .ok{color:#060}
 button{font-size:13px;padding:3px 14px;margin-right:6px}
 .hint{color:#555;font-size:11px}
-.fdoc{font-size:11px;color:#00c;cursor:pointer;text-decoration:underline}
+.fdoc{font-size:11px;color:#00c}  /* ссылка на ГОСТ в программе открывала .doc — не гиперссылка, без подчёркивания */
 #help{background:#fff;border:1px solid #7f9db9;padding:8px;display:none;font-size:12px}
 #help i{font-family:Georgia,serif}
-.footnote{width:660px;max-width:100%;box-sizing:border-box;margin:6px auto;font-size:11px;color:#444;padding:0 8px}
+/* «печатные» формулы справки — CSS-дроби (офлайн file://, без KaTeX/MathJax) */
+.math{font-family:'Times New Roman',Georgia,serif;font-size:1.2em;margin:.4em 0}
+.math sup{font-size:.65em}
+.mrow{display:flex;flex-wrap:wrap;align-items:center;gap:.15em 1em;margin:.3em 0}
+.mlab{flex:1 1 20em;font-family:inherit;font-size:12px;color:#333}
+.frac{display:inline-flex;flex-direction:column;text-align:center;vertical-align:middle;margin:0 .15em;line-height:1.25}
+.frac>.fnum{border-bottom:1px solid currentColor;padding:0 .3em}
+.frac>.fden{padding:0 .3em}
+.grp{display:inline-block;vertical-align:middle}
+.mdef{margin-top:.5em;font-size:12px;font-family:inherit}
+.drow{display:flex;gap:.4em;margin:.1em 0}
+.dsym{flex:0 0 2.6em;text-align:right;font-family:'Times New Roman',Georgia,serif;font-size:1.2em}
+/* латинские переменные — курсив (<i>), греческие (λ, ν) — прямые: ν не путается с v, как в книге */
+.nu{font-family:'Cambria Math','MathJax_Math','STIX Two Math','DejaVu Math TeX Gyre',Georgia,serif;font-style:italic}
+.footnote{width:1024px;max-width:100%;box-sizing:border-box;margin:6px auto;font-size:11px;color:#444;padding:0 8px}
 
 /* ширины контролов (были inline в разметке) */
 .w-material{width:340px}
@@ -26,6 +41,20 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .w-t{width:70px}
 .w-mode{width:100%}
 .w-nupreset{width:150px}
+
+/* «Исходные данные» и «Участок»: подписи в одну колонку, контролы равной ширины друг под другом */
+.fields .row{display:grid;grid-template-columns:minmax(0,1fr) 165px;column-gap:8px;align-items:center;margin:5px 0}
+.fields .row.full{grid-template-columns:minmax(0,1fr)}
+.fields .row>b,.fields .row>span:first-child{text-align:right}
+.fields .row.full>b{text-align:left} /* «Система:» — у левого края */
+.fields .row>input[type=text],.fields .row>select{width:100%}
+.fields .ctl{display:flex;gap:6px;align-items:center;min-width:0}
+.fields .ctl>input,.fields .ctl>select{flex:1 1 auto;min-width:0}
+.fields .ctl>.hint{flex:0 1 auto}
+#dcv{flex:1 1 70px;min-width:0}
+#qunit{flex:0 0 60px}
+#duLine{white-space:pre-line}
+#dpOther{white-space:nowrap}
 
 /* ===== планшет/узкое окно: колонки в столбик (порог 820 — чтобы iPad-портрет 768 тоже складывался) ===== */
 @media (max-width:820px){
@@ -46,6 +75,9 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
    padding:6px 4px;border-radius:3px}
  button{font-size:16px;padding:10px 18px;border-radius:4px}
  .row{margin:7px 0}
+ /* «как в аптеке» на телефоне отменяем: метка сверху, контрол на всю ширину */
+ .fields .row{display:block}
+ .fields .row>b,.fields .row>span:first-child{text-align:left}
  /* строки ввода: метка сверху, контрол на всю ширину */
  .row>input[type=text],.row>select{display:block;width:100%;margin-top:3px}
  .row>b,.row{display:block}
@@ -58,7 +90,8 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
  #len,#k{display:block;width:100%}
  label{display:inline-block;margin-right:12px;padding:4px 0}  /* крупные радиокнопки */
  input[type=radio]{width:20px;height:20px;vertical-align:middle}
- #out{font-size:15px;padding:10px;min-height:110px}
+ #out,#outH{font-size:15px;padding:10px;min-height:110px}
+ #outH{min-height:70px}
  #help{font-size:14px;padding:10px}
  .hint,.fdoc{font-size:13px}
  .footnote{font-size:12px}
