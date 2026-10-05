@@ -39,7 +39,7 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
  body{font-size:15px}                    /* читаемость без pinch-zoom */
  #app{margin:0;border:none;border-radius:0;padding:6px}
  h1{font-size:17px}
- h1 .subtitle{font-size:13px}     /* подзаголовок — читаемый на телефоне */
+ h1 .subtitle{font-size:13px;display:block}     /* подзаголовок — читаемый на телефоне, с новой строки */
  fieldset{margin:8px 0;padding:8px}
  legend{font-size:15px}
  select,input[type=text]{font-size:16px; /* <16px iOS зумит поле при фокусе */
