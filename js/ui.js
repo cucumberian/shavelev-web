@@ -37,8 +37,8 @@ function applySysVisibility(){
  const ci=!!currentMat().cls;
  ['sysRow','mestRow','modeRow','kRow'].forEach(id=>$(id).style.display=ci?'none':'');
  $('srcGrid').classList.toggle('two',ci); // класс слева, остальное справа (грид только на чугуне)
- $('sysField').style.display=currentMat().id==='asbes'?'none':''; // а/ц (frmtablII4): блока режим/теплоноситель в оригинале нет
- $('wearField').style.display=currentMat().id==='asbes'?'none':''; // а/ц: переключателя новые/неновые в окне нет — формула справедлива для обоих (справка оригинала)
+ $('sysField').style.display=(currentMat().id==='asbes'||currentMat().id==='plastic')?'none':''; // а/ц (frmtablII4) и пластик (скрины 05.10): блока режим/теплоноситель в окне нет
+ $('wearField').style.display=(currentMat().id==='asbes'||currentMat().id==='plastic')?'none':''; // а/ц и пластик: переключателя новые/неновые нет — формула справедлива для обоих (справка оригинала)
  $('nuT').style.display=ci?'':'none';
  $('rhoHint').style.display=ci?'none':'';
  if(ci){$('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';$('rho').disabled=true;}
@@ -51,16 +51,22 @@ function curCls(){const r=document.querySelector('input[name=cls]:checked');retu
 /* а/ц (frmtablII4): класс трубы ВТ и тип по размерам */
 function curVt(){const r=document.querySelector('input[name=vt]:checked');return r?r.value:'ВТ6';}
 function curTip(){const r=document.querySelector('input[name=tip]:checked');return r?+r.value:1;}
+/* пластик (frmtablII5): марка полиэтилена (Option1–4) и серия SDR (Option5–13) */
+function curPe(){const r=document.querySelector('input[name=pe]:checked');return r?r.value:'32';}
+function curSdr(){const r=document.querySelector('input[name=sdr]:checked');return r?r.value:null;}
 
 /* Состояние блока исходных данных (frmtablII3, проверка на живой программе):
    «другой» свободен при любом классе/dу; при включении блокируется весь блок —
    классы, селектор dу, строка dн/S/dв; dp — ручной ввод. Вызывается при смене
    материала/класса/чекбокса. */
 function applyClsState(){
- const other=!!currentMat().cls&&$('danother').checked;
- document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other);
- $('dsel').disabled=other;
- $('dcv').disabled=!$('danother').checked;
+ const m=currentMat();
+ const other=$('danother').checked;
+ const gated=!!(m.cls||m.pe); // чугун «другой» (frmtablII3) и пластик «не по ГОСТу» (frmtablII5): выбор блокируется, dp — ручной ввод
+ document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
+ document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
+ $('dsel').disabled=other&&gated;
+ $('dcv').disabled=!other;
 }
 
 /* Заполнение списка диаметров; выбор диаметра/стенки сохраняется при пересборке. */
@@ -70,6 +76,8 @@ function fillDiameters(){
  sel.innerHTML='';
  $('clsRow').style.display=m.cls?'':'none';
  $('vtRow').style.display='none'; $('tipRow').style.display='none'; // селекторы а/ц — только на своей странице
+ $('peRow').style.display='none'; $('sdrRow').style.display='none'; // блоки пластика — только на своей странице
+ $('dpOtherCap').textContent=m.pe?'не по ГОСТу':'другой'; // Check1 frmtablII5 озаглавлен иначе, чем «другой» прочих страниц
  if(m.gas){
    // frmtablII1: dн → связанная стенка S → dp = dн − 2s − 1
    m.gas.dn.forEach(d=>{
@@ -99,6 +107,27 @@ function fillDiameters(){
     sel.appendChild(o);});
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
    $('thicknessRow').style.display='none';
+ } else if(m.pe){
+   // frmtablII5 (скрины 05.10.2026 + ГОСТ 18599-2001 табл.1–4): марка ПЭ + серия SDR + комбо dн.
+   // Доступность серии — только по марке (матрица живой программы); список dн — строки выбранной серии
+   // (подтверждено из программы: MRS3.2+SDR21 → 32,40,50,63,75,90,110,125,140,160); dв = dн − 2·e ном.
+   $('peRow').style.display=''; $('sdrRow').style.display='';
+   $('thicknessRow').style.display='none';
+   const g=m.pe[curPe()];
+   const dnPrev=+prev||null;
+   let sdr=curSdr();
+   if(!sdr||!g[sdr]){ // серия недопустима для новой марки — берём первую допустимую (предпочитая с текущей dн)
+     sdr=null;
+     const rs=[...document.querySelectorAll('input[name=sdr]')].filter(r=>g[r.value]);
+     for(const r of rs) if(dnPrev&&g[r.value][dnPrev]!==undefined){sdr=r.value;break;}
+     if(!sdr&&rs.length)sdr=rs[0].value;
+     const r=document.querySelector('input[name=sdr][value="'+sdr+'"]');if(r)r.checked=true;
+   }
+   document.querySelectorAll('input[name=sdr]').forEach(r=>{r.disabled=!g[r.value];});
+   const col=g[sdr]||{};
+   Object.keys(col).map(Number).sort((a,b)=>a-b).forEach(dn=>{
+     const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
+   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
  } else if(m.cls){
    // frmtablII3: ОДИН список dу для всех классов из duList программы (14 шт; 450/700/900 нет),
    // выбор сохраняется при смене класса; dp — из таблицы класса (см. curDv).
@@ -138,6 +167,10 @@ function fillDiameters(){
    $('dLabel').textContent='Условный проход dу, мм:';
    $('dvLabel').innerHTML='Внутренний диаметр dp, мм:';
    $('dpOther').style.display='';
+  } else if(m.pe){ // frmtablII5: dн + dв + «не по ГОСТу» (Check1, 0x5fcfe)
+   $('dLabel').textContent='Наружный диаметр dн, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
+   $('dpOther').style.display='';
   } else if(!m.gas){ // подписи строк — общие (для газовой страницы заданы выше)
    $('dLabel').textContent='Диаметр:';
    $('tLabel').textContent='Толщина стенки, мм:';
@@ -165,7 +198,7 @@ function findDByDv(m,dv){
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls||m.id==='asbes') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.pe||m.id==='asbes') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -221,6 +254,11 @@ function curDv(){
    const it=row&&row.items.find(x=>x[0]===vt&&x[1]===tip);
    return it?it[2]:NaN;
   }
+  if(m.pe){ // frmtablII5: dв = dн − 2e (ГОСТ 18599-2001, табл.1–4 по марке и SDR); «не по ГОСТу» — ручной dв в окно ввода
+    if($('danother').checked) return numStrict($('dcv').value);
+    const dn=+$('dsel').value,g=m.pe[curPe()],e=g[curSdr()]&&g[curSdr()][dn];
+    return e===undefined?NaN:dn-2*e;
+  }
   return parseFloat($('dsel').value);
 }
 
@@ -239,14 +277,14 @@ function calc(){
  if(L===0){out.innerHTML='<span class="warn">Длина участка не может равняться нулю!</span>';return;}
  const m=currentMat();
  const ci=!!m.cls; // frmtablII3: k и местных сопротивлений нет — k≡0, H=i·L (FUN_004ae2c0)
- const nomisc=ci||m.id==='asbes'; // frmtablII4 (а/ц): locals/k в окне нет, h=i·L (скрин 05.10.2026)
+ const nomisc=ci||m.id==='asbes'||m.id==='plastic'; // а/ц (frmtablII4) и пластик (скрины 05.10.2026): locals/k в окне нет, h=i·L
  let k=nomisc?0:(numStrict($('k').value)||0);
  if(!nomisc){
   if(k<0){out.innerHTML='<span class="warn">коэффициент местных сопротивлений k не может быть отрицательным!</span>';return;}
   if(!$('chkMest').checked) k=0; // «учесть потери на местные сопротивления» выключен — k не применяется
  }
- const nu=numStrict($('nu').value);
- if(isNaN(nu)){out.innerHTML='<span class="warn">Вы не ввели значение коэффициента кинематической вязкости теплоносителя!</span>';return;}
+ if(!nomisc){const nu=numStrict($('nu').value); // ν-поле в окне пластика/а/ц отсутствует — и проверки его нет
+  if(isNaN(nu)){out.innerHTML='<span class="warn">Вы не ввели значение коэффициента кинематической вязкости теплоносителя!</span>';return;}}
  const rho=numStrict($('rho').value)||1000;
  const wear=document.querySelector('input[name=wear]:checked').value;
  const d=dv/1000;
@@ -260,9 +298,9 @@ function calc(){
  lines.push(`i = ${fmt(i*1000,3)} мм/м  (1000i = ${fmt(i*1000,1)})`);
  lines.push(`удельные потери давления R = ${fmt(R,1)} Па/м`);
  // блок «Потери напора…» — как в программе: чугун (Frame4 «по длине») H=i·L без k; прочие — i·L·(1+k)
- $('hLegend').textContent=ci?'Потери напора по длине, м':'Потери напора на участке, м';
+ $('hLegend').textContent=nomisc?'Потери напора по длине, м':'Потери напора на участке, м';
  $('outH').innerHTML=(nomisc?[]:[`k = ${fmt(k,2)}`]).concat(
-   [`Потери напора ${ci?'по длине':'на участке'} H = i·L${nomisc?'':'·(1+k)'} = ${fmt(H,3)} м`,
+   [`Потери напора ${nomisc?'по длине':'на участке'} H = i·L${nomisc?'':'·(1+k)'} = ${fmt(H,3)} м`,
     `потери давления = ${fmt(R*L*(1+k),0)} Па`]).join('\n');
  const cls=[];
  if(ci){ // frmtablII3 (FUN_004ae2c0): пары порогов 0,8…2 / 1…3 / 1,5…4 по диаметру (живая программа 05.10.2026):
@@ -272,20 +310,36 @@ function calc(){
   const lo=dv<=200?0.8:(dv<800?1:1.5), hi=dv<=200?2:(dv<800?3:4);
   if(v>hi) cls.push('<span class="warn">Большая скорость! Рекомендуется увеличить диаметр</span>');
   if(v<lo) cls.push('<span class="warn">Малая скорость! Рекомендуется уменьшить диаметр</span>');
- } else {
+ } else if(m.id!=='asbes'&&m.id!=='plastic'){ // а/ц и пластик: скоростных предупреждений в окне нет — только эконом-строка (скрины 05.10.2026)
   const lim=VEL_LIMIT[$('mode').value]||VEL_LIMIT.potable; // защита от пустого mode
   if(v>lim[1]) cls.push(`<span class="warn">Внимание! Скорость больше ${lim[1]} м/с, рекомендуется увеличить диаметр</span>`);
   if(v<lim[0]) cls.push(`<span class="warn">Малая скорость! Рекомендуется уменьшить диаметр</span>`);
  }
- // экономическая рекомендация по dу (сталь/чугун/пластик/ж/б)
- const econ=ECON[m.id==='steel-es'?'steel':m.id];
- if(econ && (m.id==='ci'||m.id==='steel'||m.id==='steel-es'||m.id==='plastic'||m.id==='conc')){
-   const qls=q*1000; let best=null;
-   for(const dd of Object.keys(econ).map(Number).sort((a,b)=>a-b)){
-     if(qls>=econ[dd]) best=dd;
-   }
-   if(best===null) cls.push(`При расходе ${fmt2(qls)} л/сек рекомендуется использовать трубу с диаметром менее ${Math.min(...Object.keys(econ).map(Number))} мм`);
-   else cls.push(`Применение трубы диаметром ${best} мм при расходе ${fmt2(qls)} л/сек экономически обосновано`);
+ // Блок рекомендации — как в программе: подписи существуют только для рядов своей таблицы (BSTR
+ // 0x44fd4..0x47434, ряды в ECON_ROWS). opt = минимальный ряд с v ≤ VREC на его dв; sel==opt →
+ // «экономически обосновано» про выбранный, иначе → «рекомендуется использовать трубу …opt…».
+ // Тексты — дословные шаблоны EXE («л/сек = … м куб/ч»). Порог VREC — гипотеза (см. data.js).
+ const rows=ECON_ROWS[m.id];
+ if(rows){
+   const qls=q*1000,m3=q*3600;
+   const dpOf=(d)=>{
+     if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
+       const dn=+it[0],s=parseFloat($('tsel').value);return isNaN(s)?NaN:dn-2*s-1;}
+     if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
+       return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
+     if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
+     return d; // ж/б: dв = dу
+   };
+   const vrow=d=>{const dp=dpOf(d);if(isNaN(dp))return NaN;const dm=dp/1000;return q/(Math.PI*dm*dm/4);};
+   const selD=m.gas?m.gas.du[$('dsel').value]:+$('dsel').value;
+   let opt=null;for(const d of rows){const v2=vrow(d);if(!isNaN(v2)&&v2<=VREC){opt=d;break;}}
+   if(opt===null&&m.id!=='steel'&&m.id!=='conc')opt=rows[rows.length-1]; // чугун/пластик: кламп к максимуму — «более» строк нет
+   const word=m.pe?'диаметром':'с условным проходом';
+   if(opt===null)cls.push(m.id==='steel'
+     ?`<span class="warn">Большая скорость! При расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч рекомендуется использовать трубу с диаметром более 500мм</span>`
+     :`<span class="warn">Большая скорость! Рекомендуется использовать трубу с условным проходом более 1600мм</span>`);
+   else if(opt===selD)cls.push(`<span class="ok">Применение трубы ${word} ${opt}мм при расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч экономически обосновано</span>`);
+   else cls.push(`<span class="warn">При расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч рекомендуется использовать трубу ${word} ${opt}мм</span>`);
  }
  out.innerHTML=lines.join('\n')+'\n'+cls.join('\n');
 }
@@ -296,7 +350,9 @@ const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="f
 function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
- h.innerHTML = currentMat().id==='ci' ? helpCI() : (currentMat().id==='asbes' ? helpAsbes() : helpSteel());
+ const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic};
+ const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
+ h.innerHTML=hf?hf():'';
  h.style.display='block';
 }
 /* Справка стальной страницы — как в оригинальной программе (frmtablII1 help, 0x50395) */
@@ -337,7 +393,10 @@ function helpSteel(){
  <b>Железобетон</b> (22): A = 0,000802·(1 + 3,51/v)<sup>0,190</sup> / d<sup>1,190</sup> (×1,43 от а/ц)<br>
  <b>Пластик</b> (8): i = 0,000685·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup>;
  <b>Стекло</b> (9): i = 0,000745·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup> — не A·v²/d<sup>e</sup>, степень у v своя<br>
- <span class="hint">ν воды = 1,3·10⁻⁶ м²/с (t=10°C); пороги: 1,2 м/с = 9,2·10⁵·ν; d в метрах.</span>`;
+ <span class="hint">ν воды = 1,3·10⁻⁶ м²/с (t=10°C); пороги: 1,2 м/с = 9,2·10⁵·ν.<br>
+  d в метрах. Обозначения — одна величина: d_р (книга) = dp (справка программы) = dв в интерфейсе,
+  подставляется d_р = dв/1000. dв берётся из таблиц (для пластика по ГОСТ dв = dн − 2·e ном),
+  «не по ГОСТу» — вводится вручную.</span>`;
 }
 
 /* Справка чугунной страницы (frmtablII3, help BSTR VA 0x4500aa): только чугунные формулы (кн. 3а, 6, 7)
@@ -389,12 +448,32 @@ function helpAsbes(){
   "другой" диаметр и в окно ввода введите соответствующее значение расчетного внутреннего диаметра.`;
 }
 
+/* Справка пластика (окно «пластмассовые трубы ГОСТ 18599-2001», скрин оригинала 05.10.2026) — дословно */
+function helpPlastic(){
+ return `<b>пластмассовые трубы ГОСТ 18599-2001</b><hr>
+  Для гидравлического расчета пластмассовых труб используют формулу:<br>
+  <i>i</i>&nbsp;=&nbsp;0,000685·${fr('v<sup>1,774</sup>','dp<sup>1,226</sup>')}<br><br>
+  <i>i</i> - гидравлический уклон<br>
+  <i>v</i> - скорость движения воды, м/с<br>
+  dp - расчетный внутренний диаметр, м<br><br>
+  Благодаря высокой коррозионной стойкости пластмассовых труб увеличения их сопротивления в процессе эксплуатации
+  практически не наблюдается. Поэтому приведенной выше формулой можно пользоваться как для расчета новых,
+  так и для неновых пластмассовых труб.<br><br>
+  Величины внутренних диаметров приняты по ГОСТ 18599-2001. При расчете пластмассовых труб не относящихся к
+  ГОСТ 18599-2001 установите флажок "не по ГОСТу" и в окно ввода введите соответствующее значение расчетного
+  внутреннего диаметра.<br><br>
+  <span class="hint">Внутренний расчетный диаметр dp = dв. Для труб по ГОСТ dв = dн − 2·e ном, где e — номинальная толщина стенки из таблиц
+  ГОСТ 18599-2001 по выбранной марке и SDR; при «не по ГОСТу» dв вводится вручную.</span>`;
+}
+
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!m.cls)$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
+$('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!(m.cls||m.pe))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
+document.querySelectorAll('input[name=pe]').forEach(r=>r.onchange=fillDiameters); // пластик: марка ПЭ → список dн и доступность SDR
+document.querySelectorAll('input[name=sdr]').forEach(r=>r.onchange=fillDiameters); // пластик: серия SDR → список dн и dв
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();}; // как в программе: при «другой» dp-инпут редактируем, блок dу/классов/dн-S-dв блокируется
 document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм только у «неновых» (VarCmpLe(dв,300) And Option1)

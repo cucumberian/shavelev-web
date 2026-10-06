@@ -105,9 +105,9 @@ const TOOLS=[
     return textResult({
       materials:MATERIALS.map(m=>({
         id:m.id,name:m.name,
-        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.gas? m.gas.dn : (m.cls? (m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b)) : m.d)),
+        diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.pe? [...$('dsel').options].map(o=>+o.value) : (m.gas? m.gas.dn : (m.cls? (m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b)) : m.d))),
         has_wall_thickness:!!(m.wall||m.gas),
-        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv'))),
+        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка ПЭ и серия SDR выбираются в UI, diameter_mm=dн)':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv')))),
         pipe_classes:m.cls?Object.keys(m.cls):undefined
       })),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
@@ -185,8 +185,8 @@ const TOOLS=[
         old_v_lt_1_2:'A=0.000912·(1+0.867/v)^0.3; e=1.3',
         asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19',
         conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19',
-        plastic_grp_pex:'A=0.000685·(1+1.774/v)^0.226; e=1.226',
-        glass:'A=0.000745·(1+1.774/v)^0.226; e=1.226'
+        plastic_grp_pex:'i=0.000685·v^1.774/dp^1.226',
+        glass:'i=0.000745·v^1.774/dp^1.226'
       },
       source:'кн. Шевелевы 1984; программа «Таблицы Шевелева» ver 3.0, БрГТУ 2008'
     });

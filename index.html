@@ -33,6 +33,21 @@
    <label><input type="radio" name="cls" value="ЛА" checked> ЛА</label>
    <label><input type="radio" name="cls" value="А"> А</label>
    <label><input type="radio" name="cls" value="Б"> Б</label></div>
+  <div class="row full" id="peRow" style="display:none"><b>Полиэтилен:</b><!-- frmtablII5 Frame2: Option1–4 -->
+    <label><input type="radio" name="pe" value="32" checked> ПЭ32 (MRS3,2)</label>
+    <label><input type="radio" name="pe" value="63"> ПЭ63 (MRS6,3)</label>
+    <label><input type="radio" name="pe" value="80"> ПЭ80 (MRS8,0)</label>
+    <label><input type="radio" name="pe" value="100"> ПЭ100 (MRS10,0)</label></div>
+  <div class="row full" id="sdrRow" style="display:none"><b>Серия труб:</b><!-- frmtablII5 Frame3: Option5–13 -->
+    <label><input type="radio" name="sdr" value="41"> SDR41 (S20)</label>
+    <label><input type="radio" name="sdr" value="26"> SDR26 (S12,5)</label>
+    <label><input type="radio" name="sdr" value="21"> SDR21 (S10)</label>
+    <label><input type="radio" name="sdr" value="17.6"> SDR17,6 (S8,3)</label>
+    <label><input type="radio" name="sdr" value="17"> SDR17 (S8)</label>
+    <label><input type="radio" name="sdr" value="13.6"> SDR13,6 (S6,3)</label>
+    <label><input type="radio" name="sdr" value="11"> SDR11 (S5)</label>
+    <label><input type="radio" name="sdr" value="9"> SDR9 (S4)</label>
+    <label><input type="radio" name="sdr" value="6"> SDR6 (S2,5)</label></div>
  </div>
  <div id="srcRight">
  <div class="row full" id="vtRow" style="display:none"><b>Условный проход, мм:</b>
@@ -49,7 +64,7 @@
    <select id="tsel" class="w-t"></select></div>
  <div class="row" id="dcalcRow"><span id="dvLabel">Расчётный внутренний диаметр dp, мм:</span>
    <span class="ctl"><input type="text" id="dcv" disabled>
-   <label id="dpOther" style="display:none"><input type="checkbox" id="danother"> другой</label></span></div>
+   <label id="dpOther" style="display:none"><input type="checkbox" id="danother"> <span id="dpOtherCap">другой</span></label></span></div>
  <div class="row full"><span id="duLine"></span></div>
  <div class="row full" id="ciDims" style="display:none"><span id="ciDimsLine"></span></div>
  </div>
