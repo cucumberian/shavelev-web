@@ -1,7 +1,8 @@
 /* calc.js — расчётный движок клона «Таблицы Шевелева»: ТОЛЬКО вычисления, без DOM.
    Здесь собрано всё, что считает: единицы расхода, скорость, уклон, потери, предупреждения
    по скорости, строка рекомендации и печать чисел. Константы формул — formulas.js,
-   справочные таблицы — data.js. ui.js читает контролы и рисует результат; webmcp.js
+   справочные таблицы — js/data/ (модуль на каждый тип труб + registry/docs/modes). ui.js читает
+   контролы и рисует результат; webmcp.js
    вызывает те же функции. Движок тестится в node без jsdom (test/calc_test.js).
 
    Модель программы (реверс shev.exe ver 3.0):
@@ -52,8 +53,8 @@ const NU_FIX=1.3e-6, RHO_FIX=1000;
    usesSys() true только для steel и steel-es (там в окне есть «Выбор системы», t и k).
    usesWear() — где есть «новые/неновые»: строки «новые»/«неновые» в EXE лежат только в
    шаблонах frmtablII11 (сталь), frmtablII2 (э/с) и frmtablII3 (чугун). */
-const NO_SYS=['ci','asbes','plastic','pex','metal-pex','conc','grp','glass'];
-const NO_WEAR=['asbes','plastic','pex','metal-pex','conc','grp','glass'];
+const NO_SYS=['ci','asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
+const NO_WEAR=['asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
 function matOf(id){ return MATERIALS.find(m=>m.id===id) }
 function usesSys(mat){ return !NO_SYS.includes(mat) }
 function usesWear(mat){ return !NO_WEAR.includes(mat) }
@@ -100,11 +101,78 @@ function recommendation(mat,wear,q_m3s,selD,dpOf){
  return {cls:'warn',text:`При расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч рекомендуется использовать трубу ${word} ${opt}мм`};
 }
 
+/* ─── медные трубы (frmtablII9, СП 40-108-2004): отдельная ветка движка ───
+    inp.cuSys: cold|circ|supply|heat (Option1…4); inp.xiSum — Σξ из Frame6; inp.cool — вода/другой;
+    inp.cuNu/inp.cuRho — ν и ρ (для «вода» ui.js подставляет их по температуре из Combo3).
+    Модель программы (FUN_00515500):
+      cold/circ → i по (2); supply → i по (3); heat → R по (5)–(9), i = R/(ρ·g)
+      R = ρ·g·i, g = 9,80665 (на этой странице — не 9,81: @0x5191ea/0x51a7a4/0x51a8be)
+      H = i·L + V²·Σξ/(2g), 2g = 19,62 (DAT_004011d8 @0x51a4c8) — ξ входит ОТДЕЛЬНЫМ слагаемым,
+          не через k
+      ΔP = R·L + Z, Z = 0,5·ρ·V²·Σξ (СП 40-108-2004 (10), (3.4.4)) */
+function copperCalc(inp){
+ const m=matOf('copper'); if(!m) return {ok:false,error:'материал не найден'};
+ const sys=['cold','circ','supply','heat'].includes(inp.cuSys)?inp.cuSys:'cold';
+ const S=m.cuSys[sys];
+ const qraw=inp.q;
+ if(isNaN(qraw)) return {ok:false,error:'ошибка ввода — введите значение расхода'};
+ if(qraw<0) return {ok:false,error:'расход не должен быть отрицательным!'};
+ if(qraw===0) return {ok:false,error:'расход не должен равняться нулю! введите значение расхода'};
+ const dv=inp.dv_mm;
+ if(isNaN(dv)) return {ok:false,error:'ошибка ввода — Введите значение диаметра в мм'};
+ if(dv<=0) return {ok:false,error:'диаметр не может равняться нулю! Введите значение диаметра в мм'};
+ const L=inp.L;
+ if(isNaN(L)) return {ok:false,error:'введите значение длины участка в м'};
+ if(L<0) return {ok:false,error:'Длина участка не может быть отрицательным!'};
+ if(L===0) return {ok:false,error:'Длина участка не может равняться нулю! введите значение длины участка в м'};
+ let nu=inp.cuNu, rho=inp.cuRho;
+ if(sys==='cold'){
+  // Option1 «холодного водоснабжения»: Frame4 «Температура» и Frame5 «Теплоноситель» неактивны —
+  // вода со стандартными ν=1,3·10⁻⁶ (DAT_00402448) и ρ=1000
+  nu=NU_FIX; rho=RHO_FIX;
+ } else {
+  if((sys==='circ'||sys==='supply') && isNaN(inp.t))
+   return {ok:false,error:'Вы не ввели температуру! Для систем горячего водоснабжения рекомендуется t=60°С. Введите значение температуры, в °С'};
+  // Option2/3 (циркуляционный и подающий ГВС): активен только Frame4 — ν и ρ берутся по t,
+  // ручной теплоноситель недоступен. Frame5 «Теплоноситель» («вода/другой», Text3 ν, Text18 ρ)
+  // активен только при Option4 «системы отопления».
+  if(sys==='heat' && inp.cool==='other'){
+   if(isNaN(nu)) return {ok:false,error:'Вы не ввели значение коэффициента кинематической вязкости теплоностеля'};
+   if(isNaN(rho)||rho<=0) return {ok:false,error:'Вы не ввели значение плотности теплоностеля!'};
+  }
+ }
+ if(isNaN(nu)) nu=NU_FIX;                 // t<50 или t не выбран: ν = 1,3·10⁻⁶ (DAT_00402448 @0x5166da)
+ if(isNaN(rho)||rho<=0) rho=RHO_FIX;
+ const q=qToM3s(qraw,inp.qunit), d=dv/1000, v=velocity(q,dv);
+ let i,R;
+ if(S.f===2){ i=cuI2(nu,v,d); R=i*rho*CU.GC }
+ else if(S.f===3){ i=cuI3(nu,v,d); R=i*rho*CU.GC }
+ else { R=cuR5(nu,v,d); i=R/(rho*CU.GC) }
+ const xi=isNaN(inp.xiSum)?0:inp.xiSum;
+ const H=i*L + v*v*xi/CU.G2;
+ const Z=0.5*rho*v*v*xi;
+ const P=R*L+Z;
+ const lines=[`Скорость v = ${fmt(v,3)} м/с`];
+ if(S.f===5) lines.push(`удельные потери давления R = ${fmt(R,1)} Па/м`);
+ else lines.push(`i = ${fmt(i,3)} м/м  (1000i = ${fmt(i*1000,3)} мм/м)`,
+                 `удельные потери давления R = ${fmt(R,1)} Па/м`);
+ // оригинал печатает «Потери напора на участке H=… м» и «Потери давления на участке … Па»;
+ // слагаемое ξ показано явно (в меди местные сопротивления НЕ через k): H = i·L + V²Σξ/(2g)
+ const outH=[`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt(H,3)} м`, `потери давления = ${fmt(P,0)} Па`];
+ if(S.f===5) outH.push(`Падение давления в системе отопления = ${fmt(P,0)} Па`);
+ const notes=[];
+ if(v>S.lim){ notes.push({cls:'warn',text:'Большая скорость! Рекомендуется увеличить диаметр'});
+              notes.push({cls:'warn',text:S.note}); }
+ return {ok:true,q,qunit:inp.qunit,v,i,i1000:i*1000,R,H,P,Z,xi,dv_mm:dv,L,rho,nu,sys,
+   hLegend:'Потери напора на участке, м',lines,outH,notes};
+}
+
 /* ─── главный вход движка: вход — числа, выход — объект; DOM не трогает ───
    inp = {mat, wear, dv_mm, q, qunit, L, k, mest, nu, rho, mode, selD, dpOf}
    dpOf(d) нужен только материалам с рядом рекомендации (сталь, э/с, чугун, пластик). */
 function shevCalc(inp){
  const mat=inp.mat, sys=usesSys(mat), kused=usesK(mat);
+ if(mat==='copper') return copperCalc(inp);   // свои формулы (2)/(3)/(5)–(9), ν/ρ по t, ξ-редактор
  const qraw=inp.q;
  if(isNaN(qraw)) return {ok:false,error:'ошибка ввода — введите значение расхода'};
  if(qraw<0) return {ok:false,error:'расход не должен быть отрицательным!'};
@@ -151,6 +219,6 @@ function shevCalc(inp){
 
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
- module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,
+ module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,copperCalc,
    NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesK,ciLimits,speedNotes,recommendation,shevCalc};
 }

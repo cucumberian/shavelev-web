@@ -34,7 +34,10 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .dsym{flex:0 0 2.6em;text-align:right;font-family:'Times New Roman',Georgia,serif;font-size:1.2em}
 /* латинские переменные — курсив (<i>), греческие (λ, ν) — прямые: ν не путается с v, как в книге */
 .nu{font-family:'Cambria Math','MathJax_Math','STIX Two Math','DejaVu Math TeX Gyre',Georgia,serif;font-style:italic}
-.footnote{width:1024px;max-width:100%;box-sizing:border-box;margin:6px auto;font-size:11px;color:#444;padding:0 8px}
+.footnote{width:1024px;max-width:100%;box-sizing:border-box;margin:6px auto;font-size:11px;color:#444;padding:0 8px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.footnote .gh{flex:0 0 auto;display:inline-flex;align-items:center;line-height:0}
+.footnote .gh svg{width:18px;height:18px;fill:#3a3a3a}
+.footnote .gh:hover svg{fill:#0b5ea7}
 
 /* ширины контролов (были inline в разметке) */
 .w-material{width:340px}
@@ -68,20 +71,63 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 .calcInputs .row{grid-template-columns:minmax(0,1fr) 140px}
 .calcGrid button{margin-right:0}
 
-/* Страницы, где параметры теплоносителя заданы программой (ж/б ГОСТ 12586.0-83, чугун frmtablII3):
-   блок «Режим / теплоноситель» неактивен — подписи не жирные, поля серые, курсор «запрет».
-   Значения остаются читаемыми: видно, какие ν/ρ/k применены */
-#sysField.locked{background:#e9e7df;border-color:#b8b4a6}
-#sysField.locked legend{color:#7a776c}
-#sysField.locked b,#sysField.locked label,#sysField.locked .hint{color:#7a776c;font-weight:normal}
-#sysField.locked input[type=text],#sysField.locked select{background:#e2e0d7;color:#6f6c62;border-color:#b8b4a6;cursor:not-allowed}
+/* ===== ГЛОБАЛЬНОЕ правило неактивных контролов (одно на весь клон) =====
+   Любой неактивный контрол выглядит неактивным САМ: серое поле вместо белого, приглушённый
+   текст значения, курсор «запрет»; значения остаются читаемыми (видно, какие ν/ρ/k применены).
+   Подпись поля (заголовок) при этом НЕ блекнет — она обычная. Блеклые подписи и легенды —
+   только у целиком неактивного блока (.off / .locked), как в оригинальном окне. Действует автоматически на всех полях, которые гасит движок:
+   ν и ρ на меди при «вода» (cuHeatSync), ν/пресет ν на стальных страницах при «холодном
+   водоснабжении», k без учёта местных сопротивлений, dв вне «другой», SDR/PE вне «другой»,
+   классы труб и т.д. Целые блоки гасятся теми же цветами: .off (медь: Frame4 «Температура»,
+   Frame5 «Теплоноситель») и .locked (страницы с фиксированными ν/ρ/k). */
+:root{--off-fieldset:#e9e7df;--off-bg:#e2e0d7;--off-fg:#6f6c62;--off-border:#b8b4a6;--off-caption:#7a776c}
+input:disabled,select:disabled,textarea:disabled{background:var(--off-bg);color:var(--off-fg);
+ border-color:var(--off-border);cursor:not-allowed}
+input[type=radio]:disabled,input[type=checkbox]:disabled{opacity:.55;cursor:not-allowed}
+fieldset.off,#sysField.locked{background:var(--off-fieldset);border-color:var(--off-border)}
+fieldset.off legend,#sysField.locked legend{color:var(--off-caption)}
+fieldset.off b,fieldset.off label,fieldset.off .hint,
+#sysField.locked b,#sysField.locked label,#sysField.locked .hint{color:var(--off-caption);font-weight:normal}
+fieldset.off input[type=text],fieldset.off select,
+#sysField.locked input[type=text],#sysField.locked select{background:var(--off-bg);color:var(--off-fg);
+ border-color:var(--off-border);cursor:not-allowed}
+fieldset.off input[type=radio],fieldset.off input[type=checkbox],
 #sysField.locked input[type=radio],#sysField.locked input[type=checkbox]{cursor:not-allowed;opacity:.55}
+
+
+/* ===== frmtablII9 «для медных труб СП40-108-2004» ===== */
+/* Frame2 «Выбор системы»: 4 Option — списком (в оригинале радиогруппа в рамке) */
+#cuSysField .cusys{grid-template-columns:minmax(0,1fr)}
+#cuSysField label,#cuHeatField label{display:block;margin:2px 0}
+/* Frame6 «Местные сопротивления»: 12 пар «название + ξ + количество» в две колонки (как в окне) */
+/* две колонки только когда хватает ширины на «картинка + название (≥92px) + ξ + шт.» */
+.xiGrid{display:grid;grid-template-columns:1fr 1fr;column-gap:16px;align-items:center}
+@media (max-width:1000px){.xiGrid{grid-template-columns:1fr}}
+.xiItem{display:grid;grid-template-columns:auto 40px minmax(92px,1fr) auto 52px auto;column-gap:5px;align-items:center;
+  font-size:13px;margin:3px 0}
+.xiItem input[type=number]{width:52px;padding:2px 4px;box-sizing:border-box}  /* border+padding внутри 52px — «шт.» не наползает на рамку */
+.xiItem .unit{font-size:11px;color:#555;white-space:nowrap;justify-self:start}
+#xiSum{font-weight:bold}
+/* мини-схема местного сопротивления: условная труба + стрелка потока (маркер #xiArrow) */
+.xiPic{width:40px;height:27px;display:block;overflow:visible}
+.xiPic .pipe{fill:none;stroke:#222;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.xiPic .pipe.thin{stroke-width:1.6}
+.xiPic .pipe.wide{stroke-width:4}
+.xiPic .flow{fill:none;stroke:#333;stroke-width:1.1;stroke-linecap:round;marker-end:url(#xiArrow)}
+.xiDefs{position:absolute}
+/* Frame5 «Теплоноситель» меди: грид 40/60 — слева радио «вода/другой», справа ν (Text3) и ρ (Text18) */
+.coolGrid{display:grid;grid-template-columns:40% minmax(0,1fr);column-gap:10px;align-items:center}
+.coolRadios{display:flex;flex-direction:column;gap:4px}
+.coolRadios label{white-space:nowrap}
+.coolParams{min-width:0}
+.coolParams .row{grid-template-columns:auto minmax(48px,1fr)}
 
 /* ===== планшет/узкое окно: колонки в столбик (порог 820 — чтобы iPad-портрет 768 тоже складывался) ===== */
 @media (max-width:820px){
  .col2{flex-direction:column;gap:0}
  .w-material{width:100%}
  .w-nupreset{width:130px}
+ .xiGrid{grid-template-columns:1fr}   /* местные сопротивления меди — в одну колонку */
 }
 
 /* ===== телефон ===== */
