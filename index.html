@@ -9,7 +9,11 @@
 </head>
 <body>
 <div id="app">
-<h1><span>Таблицы Шевелева</span> <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span></h1>
+<svg class="xiDefs" width="0" height="0" aria-hidden="true" focusable="false"><defs>
+ <!-- острие стрелки потока: маленький закрашенный треугольник -->
+ <marker id="xiArrow" viewBox="0 0 6 6" refX="5.6" refY="3" markerWidth="5" markerHeight="5" markerUnits="userSpaceOnUse" orient="auto">
+  <path d="M0,0 L6,3 L0,6 z" fill="#333"/></marker></defs></svg>
+<h1><span>Таблицы Шевелева</span> <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span> <span class="ver">v0.1.7</span></h1>
 
 <fieldset><legend>Материал труб</legend>
  <div class="row"><b>Комбинация труб:</b>
@@ -104,6 +108,44 @@
  <div class="row full" id="modeRow"><select id="mode" class="w-mode"></select></div>
  <div class="row" id="kRow"><b>k местных сопротивлений:</b> <input type="text" id="k" value="0"></div>
 </fieldset>
+
+<fieldset class="fields" id="cuSysField" style="display:none"><legend>Выбор системы</legend><!-- frmtablII9 Frame2 0x6fb58: Option1–4 -->
+ <div class="row full cusys">
+  <label><input type="radio" name="cusys" value="cold" checked> холодного водоснабжения</label>
+  <label><input type="radio" name="cusys" value="circ"> циркуляционного горячего водоснабжения</label>
+  <label><input type="radio" name="cusys" value="supply"> подающие системы горячего водоснабжения</label>
+  <label><input type="radio" name="cusys" value="heat"> системы отопления</label></div>
+</fieldset>
+
+<fieldset class="fields" id="cuTField" style="display:none"><legend>Температура</legend><!-- frmtablII9 Frame4 «Температура, °С» 0x6e0ef -->
+ <div class="row"><b>Температура, °С:</b><!-- Combo3 (50,60,70,80,90) -->
+  <select id="tcombo"><option value="">—</option><option value="50">50</option><option value="60">60</option>
+   <option value="70">70</option><option value="80">80</option><option value="90">90</option></select>
+  <span class="hint" id="tHint">для ГВС рекомендуется t=60°C</span></div>
+ <div class="row full"><span class="hint" id="cuTHint"></span></div>
+</fieldset>
+
+<fieldset class="fields" id="cuHeatField" style="display:none"><legend>Теплоноситель</legend><!-- frmtablII9 Frame5 «Теплоноситель» 0x6f7f5: Option7 «вода» / Option8 «другой», Text3 ν, Text18 ρ -->
+ <div class="coolGrid">
+  <div class="coolRadios"><!-- Option7 «вода» (левая колонка) / Option8 «другой» -->
+   <label><input type="radio" name="cool" value="water" checked> вода</label>
+   <label><input type="radio" name="cool" value="other"> другой</label>
+  </div>
+  <div class="coolParams"><!-- Text3 ν и Text18 ρ (правая колонка) -->
+   <div class="row"><b>ν, м²/с:</b> <input type="text" id="cunu" value="1.3e-6"></div>
+   <div class="row"><b>ρ, кг/м³:</b> <input type="text" id="curho" value="1000"></div>
+  </div>
+ </div>
+ <div class="row full"><span class="hint" id="cuCoolHint"></span></div>
+</fieldset>
+
+<fieldset class="fields" id="xiField" style="display:none"><legend>Местные сопротивления</legend><!-- Frame6 0x6e381: Check1–12 + Text5–17, Command4 «Сброс» -->
+ <div class="xiGrid" id="xiGrid"></div>
+ <div class="row"><label><input type="checkbox" id="xiother"> другие ξ=</label> <input type="text" id="xiotherval" class="w-xi"></div>
+ <div class="row"><b>Sx=</b> <span id="xiSum">0</span></div>
+ <div class="row full"><button id="xiReset">Сброс</button></div>
+</fieldset>
+
 </div>
 
 <div>
@@ -132,13 +174,30 @@
 
 <div id="help"></div>
 <div class="footnote">
-Восстановлено реверс-инжинирингом по EXE (формулы и данные) и кн. Шевелев Ф.А. «Таблицы для
-гидравлического расчета водопроводных труб», 1984. Формулы — в «Справке».</div>
+ <span>Санкт-Петербург, 2026</span>
+ <a class="gh" href="https://github.com/cucumberian/shavelev-web" target="_blank" rel="noopener"
+    title="Репозиторий: github.com/cucumberian/shavelev-web" aria-label="Репозиторий на GitHub">
+  <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.05-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.13 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg></a>
+</div>
 </div>
 
 <!-- Порядок важен: формулы → данные → UI (классические скрипты: работает с file:// без сервера) -->
 <script src="js/formulas.js"></script>
-<script src="js/data.js"></script>
+<script src="js/data/registry.js"></script>
+<script src="js/data/docs.js"></script>
+<script src="js/data/modes.js"></script>
+<script src="js/data/steel.js"></script>
+<script src="js/data/steel-es.js"></script>
+<script src="js/data/ci.js"></script>
+<script src="js/data/asbes.js"></script>
+<script src="js/data/plastic.js"></script>
+<script src="js/data/conc.js"></script>
+<script src="js/data/grp.js"></script>
+<script src="js/data/glass.js"></script>
+<script src="js/data/copper.js"></script><!-- frmtablII9 идёт сразу за стеклом -->
+<script src="js/data/xi-pics.js"></script><!-- мини-схемы Frame6 «Местные сопротивления» -->
+<script src="js/data/pex.js"></script>
+<script src="js/data/metal-pex.js"></script>
 <script src="js/calc.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/webmcp.js"></script>

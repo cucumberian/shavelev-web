@@ -1,5 +1,6 @@
 /* ui.js — логика интерфейса клона: заполнение списков, чтение контролов, вывод, справка.
-   Зависимости (загружаются раньше в index.html): formulas.js, data.js, calc.js.
+   Зависимости (загружаются раньше в index.html): formulas.js, js/data/* (registry, docs, modes,
+   модули типов труб), calc.js.
    ВСЕ вычисления — в calc.js (shevCalc, velocity, gradient, speedNotes, recommendation, fmt);
    здесь только DOM: взять значения контролов → вызвать движок → нарисовать результат. */
 "use strict";
@@ -47,6 +48,7 @@ function applySysVisibility(){
  $('hLegend').textContent=usesK(id)?'Потери напора на участке, м':'Потери напора по длине, м';
  $('nuT').style.display='none';                    // подсказка «t=10°C (как в программе)» была у заблокированного блока
  $('rhoHint').style.display=sys?'':'none';           // «для ГВС рекомендуется t=60°C» — только где есть ГВС
+ applyCopperVisibility(id);   // медная страница: свои блоки (Выбор системы/Температура/Теплоноситель/Местные)
  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
  if(!sys){
   // блок скрыт, но значения, которые реально участвуют в расчёте, держим в полях (ν=1,3·10⁻⁶ =
@@ -61,6 +63,19 @@ function applySysVisibility(){
   const cold=document.querySelector('input[name=sys]:checked').value==='cold';
   $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;
  }
+}
+
+/* Медная страница (frmtablII9 «для медных труб СП40-108-2004»): стального блока «Режим /
+   теплоноситель», режима и k на ней НЕТ; вместо них — Frame2 «Выбор системы» (Option1–4),
+   Frame4 «Температура, °С» (Combo3: 50,60,70,80,90), Frame5 «Теплоноситель» (Option7 «вода» /
+   Option8 «другой» + Text18 ρ + Text3 ν) и Frame6 «Местные сопротивления» (Check1–12 + Text5–17
+   «шт.», Check14 «другие» + Text17, Label11 «Sx=», Command4 «Сброс»). */
+function applyCopperVisibility(id){
+ const cu = id==='copper';
+ ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=cu?'':'none');
+ // на медной странице нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
+ if(cu){ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none'); }
+ if(cu) cuSysSync();
 }
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
@@ -81,7 +96,7 @@ function applyClsState(){
  const other=$('danother').checked;
  // чугун «другой» (frmtablII3), пластик «не по ГОСТу» (frmtablII5), ж/б «другой» (ГОСТ 12586.0-83)
  // и стеклопластик «другой» (СП40-104-2001): выбор по списку блокируется, dp — ручной ввод
- const gated=!!(m.cls||m.pe||m.id==='conc'||m.id==='grp'||m.id==='glass');
+ const gated=!!(m.cls||m.pe||m.sMap||m.id==='conc'||m.id==='grp'||m.id==='glass');
  document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
  document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
  $('dsel').disabled=other&&gated;
@@ -147,6 +162,15 @@ function fillDiameters(){
    Object.keys(col).map(Number).sort((a,b)=>a-b).forEach(dn=>{
      const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+ } else if(m.sMap){
+   // frmtablII9 медь (СП 40-108-2004): комбо dн (20 значений, FUN_00510a20) → комбо толщин S
+   // (FUN_00512ce0, 20 групп в порядке dн) → dв = dн − 2S (FUN_005148a0)
+   m.d.forEach(d=>{const o=document.createElement('option');o.value=String(d);o.textContent=`dн=${fmt(d,1)} мм`;sel.appendChild(o);});
+   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+   const t=$('tsel'); const prevT=t.value; t.innerHTML='';
+   (m.sMap[sel.value]||[]).forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=fmt(s,2);t.appendChild(o);});
+   if(prevT && [...t.options].some(o=>o.value===prevT)) t.value=prevT;
+   $('thicknessRow').style.display='';
  } else if(m.cls){
    // frmtablII3: ОДИН список dу для всех классов из duList программы (14 шт; 450/700/900 нет),
    // выбор сохраняется при смене класса; dp — из таблицы класса (см. curDv).
@@ -177,6 +201,11 @@ function fillDiameters(){
    $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('tLabel').textContent='Толщина стенки S, мм:';
    $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
+   $('dpOther').style.display='';
+ } else if(m.sMap){ // frmtablII9 медь: рамка «Диаметр трубы, мм» — dн + S + dв + «другой» (Check13)
+   $('dLabel').textContent='Наружный диаметр dн, мм:';
+   $('tLabel').textContent='Толщина стенки S, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
  } else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
    $('dLabel').textContent='Условный проход dу, мм:';
@@ -229,7 +258,7 @@ function findDByDv(m,dv){
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls||m.pe||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.pe||m.sMap||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -264,6 +293,12 @@ function readQ(){
 }
 function curDv(){
  const m=currentMat();
+ if(m.sMap){ // frmtablII9 медь: dв = dн − 2S (FUN_005148a0: fld S → fadd st(0),st(0) → __vbaVarSub(dн, 2S)
+             // @0x514aa6 → формат с «,» (0x441884/0x44188c) → Text2 (слот 0x54c) @0x514b56)
+   if($('danother').checked) return numStrict($('dcv').value);
+   const dn=parseFloat($('dsel').value), s=parseFloat($('tsel').value);
+   return (isNaN(dn)||isNaN(s))?NaN:dn-2*s;
+  }
  if(m.gas||m.wall){ // frmtablII1/2: dн→S→dp = dн − 2s − 1 (коррозия);
                     // для dн ≥ 300 мм уменьшение не учитывается (кн. Шевелевых, печатная стр. 6)
    if($('danother').checked) return numStrict($('dcv').value);
@@ -329,6 +364,9 @@ function calc(){
    mode:$('mode').value,
    selD:m.gas?m.gas.du[$('dsel').value]:+$('dsel').value,
    dpOf,
+   // медная страница (frmtablII9): система из Frame2, ξ из Frame6, ν/ρ из Frame5 (или по t из Combo3)
+   cuSys:cuSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
+   cool:cuCool(), cuNu:numStrict($('cunu').value), cuRho:numStrict($('curho').value),
  });
  if(!r.ok){out.innerHTML=`<span class="warn">${r.error}</span>`;return;}
  $('hLegend').textContent=r.hLegend;
@@ -343,7 +381,7 @@ function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
  const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
-  conc:helpConc,grp:helpGrp,glass:helpGlass};
+  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  h.innerHTML=hf?hf():'';
  h.style.display='block';
@@ -534,6 +572,122 @@ function helpPlastic(){
   ГОСТ 18599-2001 по выбранной марке и SDR; при «не по ГОСТу» dв вводится вручную.</span>`;
 }
 
+/* ==== медная страница (frmtablII9, СП 40-108-2004) ==== */
+function cuMat(){ return MATERIALS.find(x=>x.id==='copper') }
+function cuSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
+function cuCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
+/* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
+   Перед каждой подписью — мини-схема сопротивления (XI_PICS, js/data/xi-pics.js). */
+function xiPic(label){
+ const p=(typeof XI_PICS!=='undefined')?XI_PICS[label]:null; if(!p) return '';
+ const seg=x=>typeof x==='string' ? `<path class="pipe" d="${x}"/>`
+  : `<path class="pipe ${x.w}" d="${x.d}"/>`;
+ return `<svg class="xiPic" viewBox="0 0 44 30" role="img" aria-label="${label}">`+
+  p.body.map(seg).join('')+p.flow.map(d=>`<path class="flow" d="${d}"/>`).join('')+`</svg>`;
+}
+function fillXiGrid(){
+ const m=cuMat(), g=$('xiGrid'); g.innerHTML='';
+ m.xi.forEach((row,i)=>{
+  const lab=document.createElement('label'); lab.className='xiItem';
+  lab.innerHTML=`<input type="checkbox" id="xi${i}"> ${xiPic(row[0])} ${row[0]} <span class="hint">ξ=${fmt(row[1],1)}</span>`+
+                `<input type="number" id="xin${i}" class="w-xi" min="0" step="1" value="1"> <span class="unit">шт.</span>`;
+  g.appendChild(lab);
+ });
+}
+/* Σξ = Σ ξ_i·шт. (цепочка VarMul→VarAdd 0x518c80–0x518e79); «другие ξ» (Text17/Check14)
+   прибавляется последним VarAdd БЕЗ умножения */
+function xiTotal(){
+ const m=cuMat(); if(!m) return 0;
+ let s=0;
+ m.xi.forEach((row,i)=>{
+  const c=$('xi'+i), n=numStrict(($('xin'+i)||{}).value||'');
+  if(c && c.checked && !isNaN(n)) s+=row[1]*n;
+ });
+ if($('xiother').checked){ const o=numStrict($('xiotherval').value); if(!isNaN(o)) s+=o; }
+ return s;
+}
+function xiShow(){ $('xiSum').textContent=fmt(xiTotal(),2) }   // Label11 «Sx=»
+/* «Сброс» (Command4 → FUN_0051c530): обнуляет 13 пар Text/Check (слоты 0x338…0x39c) */
+function xiResetAll(){
+ const m=cuMat();
+ m.xi.forEach((row,i)=>{ $('xi'+i).checked=false; $('xin'+i).value='1'; });   // количество — по умолчанию 1 шт.
+ $('xiother').checked=false; $('xiotherval').value='';
+ xiShow();
+}
+
+/* Активность блоков меди — как в оригинальном окне frmtablII9:
+   «холодного водоснабжения» (Option1): Frame4 «Температура» и Frame5 «Теплоноситель» оба
+   неактивны — программа берёт воду со стандартными ν = 1,3·10⁻⁶ м²/с (DAT_00402448 @0x5166da)
+   и ρ = 1000 кг/м³; «циркуляционного» (Option2) и «подающего» (Option3) ГВС: активен только
+   Frame4 «Температура» (Combo3 50…90), по которому подставляются ν и ρ, Frame5 неактивен;
+   «системы отопления» (Option4): активны оба блока, «другой» открывает ручной ν (Text3) и ρ (Text18). */
+function cuSysSync(){
+ const m=cuMat(); if(!m) return;
+ const sys=cuSysVal();
+ const tActive = sys!=='cold';                                    // Frame4
+ const coolActive = sys==='heat';                                  // Frame5: «вода/другой» только в отоплении
+ $('tcombo').disabled=!tActive;
+ $('cuTField').classList.toggle('off',!tActive);   // весь блок выглядит неактивным
+ $('cuHeatField').classList.toggle('off',!coolActive);
+ document.querySelectorAll('input[name=cool]').forEach(r=>r.disabled=!coolActive);
+ if(!coolActive) document.querySelector('input[name=cool][value=water]').checked=true;
+ if(!tActive) $('tcombo').value='';
+ $('cuTHint').textContent   = tActive ? '' : 'в оригинале блок неактивен: вода ν = 1,3·10⁻⁶ м²/с, ρ = 1000 кг/м³';
+ $('cuCoolHint').textContent= coolActive ? '' : (tActive
+  ? 'в оригинале блок неактивен: ν и ρ подставляются по температуре'
+  : 'в оригинале блок неактивен: вода ν = 1,3·10⁻⁶ м²/с, ρ = 1000 кг/м³');
+ $('tHint').style.display=(sys==='circ'||sys==='supply')?'':'none';
+ cuHeatSync();
+}
+
+/* «вода» (Option7): ρ и ν подставляются по температуре из Combo3 — пороги 50/60/70/80/90 °C
+   (0x516bfa…0x5176e3), ρ = 10³·{0,99;0,98;0,98;0,97;0,97}, ν = 10⁻⁶·{0,55;0,47;0,41;0,36;0,36}.
+   Строк Таблицы 5 СП для t = 5…20 °C (1,52·10⁻⁶; 1,01·10⁻⁶) в EXE нет: при t<50 или пустом t
+   программа держит ν = 1,3·10⁻⁶ (DAT_00402448 @0x5166da) и ρ = 1000. «другой» (Option8) — ρ и ν
+   из Text18/Text3 (поля разблокированы). */
+function cuHeatSync(){
+ const m=cuMat(); if(!m) return;
+ const water=cuCool()==='water';
+ $('cunu').disabled=water; $('curho').disabled=water;
+ if(water){
+  const t=numStrict($('tcombo').value);
+  const row=isNaN(t)?null:m.t.filter(r=>r.t<=t).pop();
+  $('cunu').value=row?(row.nu*1e6).toFixed(2)+'e-6':'1.3e-6';
+  $('curho').value=row?String(row.rho):'1000';
+ }
+ $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply')?'':'none';
+}
+
+/* Справка медной страницы (frmtablII9): оригинал открывает sp40_108_2004.doc
+   (FUN_0051c440 @0x51c440). Здесь — формулы СП 40-108-2004 (docs/sp40-108-2004/sp40-108-2004.md:
+   формулы (2), (3), (4)–(10), Таблица 5, Приложение А) — те же константы, что в FUN_00515500. */
+function helpCopper(){
+ return `<b>Справка — для медных труб СП40-108-2004</b><hr>
+   Потери напора на единицу длины трубопровода (п. 3.4.3 СП 40-108-2004):<br>
+   <b>системы холодного и циркуляционного трубопроводов ГВС</b> — формула (2):<br>
+   <i>i</i> = 0,0161·<i>ν</i><sup>0,25</sup>·<i>V</i><sup>1,75</sup>·<i>d</i><sup>−1,25</sup><br><br>
+   <b>подающие трубопроводы систем ГВС</b> — формула (3):<br>
+   <i>i</i> = 0,051·( ${fr('6,52·lg <i>d</i> + lg(<i>Vd</i>/<i>ν</i>)','115·lg<sup>2</sup><i>d</i>')} +
+   ${fr('0,66·lg <i>d</i> + 0,1·lg(<i>Vd</i>/<i>ν</i>)','lg(<i>Vd</i>/<i>ν</i>)·lg <i>d</i>')} )·
+   ${fr('<i>V</i><sup>2</sup>','<i>d</i>')}<br><br>
+   <b>системы отопления</b> — падение давления ΔP = <i>R</i>·<i>L</i> + <i>Z</i> (п. 3.4.4), где (5):<br>
+   <i>R</i> = ${fr('<i>λ</i>·<i>V</i><sup>2</sup>','2<i>d</i>')}·10<sup>3</sup> Па/м, а <i>λ</i> из (6):<br>
+   √<i>λ</i> = 0,5·( ${fr('<i>b</i>','2')} + ${fr('1,312(2−<i>b</i>)·lg(3,7<i>d</i>/К<sub>э</sub>)','lg Re<sub>ф</sub> − 1')} ) / lg(3,7<i>d</i>/К<sub>э</sub>)<br>
+   Re<sub>ф</sub> = <i>dV</i>/<i>ν</i> (7); Re<sub>кв</sub> = ${fr('500<i>d</i>','К<sub>э</sub>')} (8);
+   <i>b</i> = 1 + ${fr('lg Re<sub>ф</sub>','lg Re<sub>кв</sub>')} (9); К<sub>э</sub> = 10<sup>−5</sup> м<br>
+   потеря давления на местных сопротивлениях <i>Z</i> = 0,5·<i>ρ</i>·<i>V</i><sup>2</sup>·Σξ (10)<br><br>
+   <span class="hint">ν и ρ воды по температуре (Таблица 5 СП; пороги программы 50/60/70/80/90 °C):
+   ν = 10<sup>−6</sup>·{0,55; 0,47; 0,41; 0,36; 0,36} м²/с, ρ = {990; 980; 980; 970; 970} кг/м³;
+   при t &lt; 50 °C программа держит ν = 1,3·10<sup>−6</sup> м²/с и ρ = 1000 кг/м³.
+   «другой» теплоноситель — ν и ρ вводятся вручную.</span><br><br>
+   ξ местных сопротивлений (Приложение А, значения в окне): отвод 90° — 0,5; тройник на проход — 0,5;
+   на ответвление — 1,5; на слияние — 1,5; на разделение потока — 3; крестовина на проход — 2;
+   на ответвление — 3; отступ — 0,5; скоба — 1; внезапное расширение — 0,5; внезапное сужение — 1;
+   калач — 0,7; «другие ξ» — сумма вручную.<br><br>
+   <span class="hint">d = внутренний диаметр = d<sub>н</sub> − 2S (S — толщина стенки из списка), м.
+   Скорость ограничена: ХВС — до 4 м/с, ГВС — до 3 м/с, отопление — до 2 м/с.</span>`;
+}
+
 /* ==== init ==== */
 fillMaterials();
 $('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!(m.cls||m.pe))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
@@ -557,6 +711,13 @@ $('sysHot').onchange=()=>{fillModes(false);$('mode').onchange();
 fillModes(false);
 applySysVisibility(); // чугунная страница: скрыть система/режим/местные/k, зафиксировать ν/ρ (t=10°C)
 $('mode').onchange(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
+fillXiGrid();
+document.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=cuSysSync); // Frame2 Option1–4
+document.querySelectorAll('input[name=cool]').forEach(r=>r.onchange=cuHeatSync);  // Frame5 вода/другой
+$('tcombo').onchange=cuHeatSync;                                                  // Combo3 50…90 °C
+$('xiGrid').onchange=xiShow; $('xiother').onchange=xiShow; $('xiotherval').oninput=xiShow;
+$('xiReset').onclick=xiResetAll;
+xiShow();
 $('btnCalc').onclick=calc;
 $('btnHelp').onclick=showHelp;
 $('gostLink').textContent=DOCS[MATERIALS[0].doc];

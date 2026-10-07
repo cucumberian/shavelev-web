@@ -37,6 +37,39 @@ const F = {
  grp:      (v,dp)=>0.0146*Math.pow(v*dp,-0.226)/G2,
 };
 
+
+/* ─── медные трубы, СП 40-108-2004 (страница frmtablII9) ───
+   Формулы взяты из первоисточника (docs/sp40-108-2004/sp40-108-2004.md, рисунки
+   x005/x007/x009/x011/x013/x015) и подтверждены константами EXE в FUN_00515500.
+   Все диаметры в формулах — в метрах (мм→м: __vbaPowerR8(10,−3) @0x516256/0x516318). */
+const CU = {
+ A2:0.0161, n2:0.25, v2:1.75, d2:-1.25,   // (2): i = 0,0161·ν^0,25·V^1,75·d^(−1,25)
+                                        // константы 0x519058–0x519072, fld [0x402420] = −1,25 @0x518ff4
+ A3:0.051, b3:6.52, c3:115, p3:0.66, q3:0.1, // (3): 0,051 @0x51a346; 6,52 @0x51a35a; 115 @0x51a36e;
+                                        // 0,66 @0x51a378; 0,1 @0x51a38c; lg — rtcLog (слот 0x40101c)
+ KE:1e-5, RE500:500, K37:3.7, K1312:1.312, HALF:0.5, // (6)–(9): Кэ=10⁻⁵ @0x519fcb; 500 @0x51a055;
+                                        // 3,7 @0x51a1d9; 0,5 @0x51ac66; 1,312 @0x51ac7a
+ K1000:1000,                            // (5): множитель 10³ — int 1000 @0x519208, PowerR8(10,+3) @0x51a76c
+ G2:19.62,                              // 2g в слагаемом местных сопротивлений V²Σξ/2g @0x51a4c8 (DAT_004011d8)
+ GC:9.80665,                            // g для пересчёта Па↔м на медной странице @0x5191ea/0x51a7a4/0x51a8be
+};
+/* (2) системы холодного и циркуляционного трубопроводов ГВС */
+function cuI2(nu,v,d){ return CU.A2*Math.pow(nu,CU.n2)*Math.pow(v,CU.v2)*Math.pow(d,CU.d2) }
+/* (3) подающие трубопроводы систем ГВС: Re_ф = dV/ν (7) вычисляется в EXE @0x519fef */
+function cuI3(nu,v,d){
+ const lg=Math.log10, lgd=lg(d), lgre=lg(v*d/nu);
+ return CU.A3*((CU.b3*lgd+lgre)/(CU.c3*lgd*lgd) + (CU.p3*lgd+CU.q3*lgre)/(lgre*lgd))*v*v/d;
+}
+/* (6)–(9): √λ = 0,5·[ b/2 + 1,312(2−b)·lg(3,7d/Кэ)/(lg Re_ф − 1) ] / lg(3,7d/Кэ);
+   Re_ф = dV/ν (7); Re_кв = 500d/Кэ (8); b = 1 + lg Re_ф/lg Re_кв (9) */
+function cuLambda(nu,v,d){
+ const lg=Math.log10, re=v*d/nu, rek=CU.RE500*d/CU.KE, b=1+lg(re)/lg(rek), l37=lg(CU.K37*d/CU.KE);
+ const sq=CU.HALF*(b/2 + CU.K1312*(2-b)*l37/(lg(re)-1))/l37;
+ return sq*sq;
+}
+/* (5) R = λV²/(2d)·10³ [Па/м] — системы отопления */
+function cuR5(nu,v,d){ return cuLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
+
 /* Выбор формулы по материалу/состоянию.
    wear: 'new'|'old'; mat — id материала; v м/с; d — внутренний диаметр, м.
    Возврат {A, e} → i = A·v²/d^e */
@@ -59,5 +92,5 @@ function iCalc(wear, mat, v, d){
 
 // экспорт для node-тестов (в браузере window есть, в node — global)
 if (typeof module!=='undefined' && module.exports){
-  module.exports={G,G2,F,iCalc};
+  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5};
 }
