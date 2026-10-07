@@ -59,6 +59,24 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
 #duLine{white-space:pre-line}
 #dpOther{white-space:nowrap}
 
+/* «Участок»: грид 50/50 — слева два ввода (Q с единицами и L), справа кнопка «Расчёт»
+   на всю высоту контейнера; «Справка» остаётся снизу во всю ширину */
+.calcGrid{display:grid;grid-template-columns:1fr 1fr;column-gap:12px;align-items:stretch}
+.calcGrid>.calcBtn{display:flex}
+.calcGrid>.calcBtn>button{flex:1 1 auto;width:100%}
+/* колонка контролов внутри «Участка» уже, чем в «Исходных данных»: подписи не должны переноситься */
+.calcInputs .row{grid-template-columns:minmax(0,1fr) 140px}
+.calcGrid button{margin-right:0}
+
+/* Страницы, где параметры теплоносителя заданы программой (ж/б ГОСТ 12586.0-83, чугун frmtablII3):
+   блок «Режим / теплоноситель» неактивен — подписи не жирные, поля серые, курсор «запрет».
+   Значения остаются читаемыми: видно, какие ν/ρ/k применены */
+#sysField.locked{background:#e9e7df;border-color:#b8b4a6}
+#sysField.locked legend{color:#7a776c}
+#sysField.locked b,#sysField.locked label,#sysField.locked .hint{color:#7a776c;font-weight:normal}
+#sysField.locked input[type=text],#sysField.locked select{background:#e2e0d7;color:#6f6c62;border-color:#b8b4a6;cursor:not-allowed}
+#sysField.locked input[type=radio],#sysField.locked input[type=checkbox]{cursor:not-allowed;opacity:.55}
+
 /* ===== планшет/узкое окно: колонки в столбик (порог 820 — чтобы iPad-портрет 768 тоже складывался) ===== */
 @media (max-width:820px){
  .col2{flex-direction:column;gap:0}
@@ -100,4 +118,7 @@ button{font-size:13px;padding:3px 14px;margin-right:6px}
  .footnote{font-size:12px}
  /* кнопки — на всю ширину, чтобы попадать пальцем */
  #btnCalc,#btnHelp{width:100%;margin:4px 0 0}
+ /* «Участок» на телефоне: кнопка «Расчёт» — под строками ввода, тоже во всю ширину */
+ .calcGrid{grid-template-columns:1fr}
+ .calcBtn{margin-top:2px}
 }

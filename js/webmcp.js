@@ -52,6 +52,10 @@ function setWear(w){
   if(w!=='new'&&w!=='old') throw new Error('wear должен быть new или old');
   document.querySelector(`input[name=wear][value=${w}]`).checked=true;
 }
+/* Страницы с зафиксированными параметрами теплоносителя: чугун (frmtablII3) и ж/б (ГОСТ 12586.0-83).
+   На них нет переключателя новые/неновые, режима, местных сопротивлений и выбора ν/ρ — параметры
+   программы (ν=1,3·10⁻⁶ = t=10°C; ρ=1000; h=i·L), поэтому mode/ν/ρ/k в configure игнорируются. */
+function fixedSys(){const m=currentMat();return !!m.cls||m.id==='conc';}
 function setPipeClass(c){
   const m=currentMat();
   if(!m.cls) throw new Error('классы (ЛА/А/Б) есть только у чугунных труб');
@@ -107,7 +111,7 @@ const TOOLS=[
         id:m.id,name:m.name,
         diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.pe? [...$('dsel').options].map(o=>+o.value) : (m.gas? m.gas.dn : (m.cls? (m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b)) : m.d))),
         has_wall_thickness:!!(m.wall||m.gas),
-        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка ПЭ и серия SDR выбираются в UI, diameter_mm=dн)':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv')))),
+        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка ПЭ и серия SDR выбираются в UI, diameter_mm=dн)':(m.id==='conc'?'dв=dу (ГОСТ 12586.0-83: 500…1600 мм, 9 значений); «другой» — ручной dp':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv'))))),
         pipe_classes:m.cls?Object.keys(m.cls):undefined
       })),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
@@ -117,16 +121,16 @@ const TOOLS=[
  },
  {
   name:'shev-configure',
-  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (мм), толщину стенки (для электросварных), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Все параметры опциональны — меняется только переданное. Возвращает подтверждение с расчётным dв.',
+  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (мм), толщину стенки (для электросварных), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Все параметры опциональны — меняется только переданное. На страницах чугуна и ж/б режим/ν/ρ/k игнорируются (параметры программы). Возвращает подтверждение с расчётным dв.',
   inputSchema:{type:'object',properties:{
     material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, conc, grp, glass, pex, metal-pex)'},
     wear:{type:'string',enum:['new','old'],description:'новые/неновые трубы'},
     pipe_class:{type:'string',enum:['ЛА','А','Б'],description:'класс чугунной трубы (только ci): единый список dу (14 значений, без 450/700/900) для всех классов, dp из таблицы класса'},
     diameter_mm:{type:'number',description:'выбранный диаметр из списка материала (dу/dн/du, мм)'},
     wall_mm:{type:'number',description:'толщина стенки мм (стальные gas/электросварные steel-es)'},
-    mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (игнорируется для ci — на чугунной странице режимов нет)'},
-    nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); игнорируется для ci — там ν=1,3·10⁻⁶ (t=10°C) зафиксирована'},
-    rho:{type:'number',description:'плотность, кг/м³; игнорируется для ci — там ρ=1000 (t=10°C) зафиксирована'}
+    mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (игнорируется для ci и conc — на этих страницах режима нет)'},
+    nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); игнорируется для ci и conc — там ν=1,3·10⁻⁶ (t=10°C) зафиксирована'},
+    rho:{type:'number',description:'плотность, кг/м³; игнорируется для ci и conc — там ρ=1000 (t=10°C) зафиксирована'}
   }},
   async execute(a){
     if(a.material!==undefined) selectMaterial(a.material);
@@ -134,7 +138,7 @@ const TOOLS=[
     if(a.wear!==undefined) setWear(a.wear);
     if(a.diameter_mm!==undefined) setDiameter(a.diameter_mm);
     if(a.wall_mm!==undefined) setWall(a.wall_mm);
-    if(a.mode!==undefined && !currentMat().cls){ // ci: режимов нет (frmtablII3) — игнорируем
+    if(a.mode!==undefined && !fixedSys()){ // ci/ж/б: режимов и k нет — игнорируем
       if(!VEL_LIMIT[a.mode]) throw new Error('неизвестный режим: '+a.mode);
       const wantHot=MODE_SYS.hot.includes(a.mode);
       const r=document.querySelector('input[name=sys][value='+(wantHot?'hot':'cold')+']');
@@ -142,8 +146,8 @@ const TOOLS=[
       $('mode').value=a.mode;
       const kv=K_MODE[a.mode]; if(kv!==undefined) $('k').value=String(kv);
     }
-    if(a.nu!==undefined && !currentMat().cls){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
-    if(a.rho!==undefined && !currentMat().cls){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
+    if(a.nu!==undefined && !fixedSys()){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
+    if(a.rho!==undefined && !fixedSys()){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
     updDv(); // dp зависит от wear (чугун: −1 мм только у «неновых») — обновить после всех параметров
     return textResult({ok:true,material:currentMat().id,wear:document.querySelector('input[name=wear]:checked').value,
       pipe_class:currentMat().cls?curCls():undefined,
@@ -152,18 +156,18 @@ const TOOLS=[
  },
  {
   name:'shev-calculate',
-  description:'Выполняет гидравлический расчёт участка (как кнопка «Расчёт»): скорость v, удельные потери i (мм/м) и R (Па/м), потери напора H=i·L·(1+k) (для ci — H=i·L, местные сопротивления отсутствуют), потери давления (Па), предупреждения о скорости и экономическая рекомендация по диаметру. Параметры расхода/длины/местных сопротивлений опциональны — без них берутся текущие значения UI.',
+  description:'Выполняет гидравлический расчёт участка (как кнопка «Расчёт»): скорость v, удельные потери i (мм/м) и R (Па/м), потери напора H=i·L·(1+k) (для ci и conc — H=i·L, местные сопротивления отсутствуют), потери давления (Па), предупреждения о скорости и экономическая рекомендация по диаметру. Параметры расхода/длины/местных сопротивлений опциональны — без них берутся текущие значения UI.',
   inputSchema:{type:'object',properties:{
     q:{type:'number',description:'расход (по умолчанию л/с)'},
     qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
     length_m:{type:'number',description:'длина участка L, м'},
-    k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci: там H=i·L)'}
+    k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci и conc: там H=i·L)'}
   }},
   async execute(a){
     if(a.q!==undefined){ $('q').value=String(a.q); }
     if(a.qunit!==undefined){ if(!['ls','mh'].includes(a.qunit)) throw new Error('qunit: ls|mh'); $('qunit').value=a.qunit; }
     if(a.length_m!==undefined) $('len').value=String(a.length_m);
-    if(a.k!==undefined) $('k').value=String(a.k);
+    if(a.k!==undefined && !fixedSys()) $('k').value=String(a.k); // ci/ж/б: k выключен — поле не трогаем
     calc();
     const r=readResult();
     if(/ошибка|не должен|не может|не ввели/.test(r.raw)&&r.v_ms===null)
@@ -177,7 +181,7 @@ const TOOLS=[
   inputSchema:{type:'object',properties:{}},
   async execute(){
     return textResult({
-      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci H=i·L; g=9.81',
+      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci и ж/б H=i·L; g=9.81',
       formulas:{
         steel_new:'λ=0.0159·(1+0.684/v)^0.226/d^0.226',
         ci_new:'λ=0.0144·(1+2.36/v)^0.284/d^0.284',

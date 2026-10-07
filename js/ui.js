@@ -30,20 +30,47 @@ function fillModes(keep){
  else sel.value=MODE_SYS[sys][0];
 }
 
-/* Чугунная страница (frmtablII3): нет переключателя ХВС/ГВС, режимов и местных
-   сопротивлений (chkMest/k) — скрываем, как в оригинале; ν/ρ фиксируем значениями
-   t=10°C (ν=1,3·10⁻⁶, ρ=1000) — формулы чугуна ν-подставленные, ν=10°C вшита в константы */
+/* Видимость блоков «Трубы» (новые/неновые) и «Режим / теплоноситель» по странице материала.
+   • чугун (frmtablII3): переключателя ХВС/ГВС, режимов и местных сопротивлений в окне нет —
+     строки скрываем, ν/ρ фиксируем (t=10°C) и показываем подсказкой;
+   • а/ц (frmtablII4) и пластик (frmtablII5): блока «Режим / теплоноситель» в окне нет вовсе;
+   • ж/б ГОСТ 12586.0-83 (скрин оригинала 06.10.2026): в окне нет ни «новые/неновые», ни
+     режима/местных сопротивлений, ни ν/ρ — параметры фиксированы. Показываем их
+     ЗАБЛОКИРОВАННЫМИ и затемнённым классом .locked (видно, какие значения применены, но
+     в них нельзя нажать); h = i·L, k не учитывается (справка ж/б: формула одна для новых и неновых). */
 function applySysVisibility(){
- const ci=!!currentMat().cls;
- ['sysRow','mestRow','modeRow','kRow'].forEach(id=>$(id).style.display=ci?'none':'');
+ const m=currentMat(), id=m.id;
+ const ci=!!m.cls, conc=id==='conc';
+ const locked=ci||conc; // ν/ρ заданы программой (ν=1,3·10⁻⁶ = t=10°C вшита в константы)
+ const noSysBlock=(id==='asbes'||id==='plastic');
+ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display=ci?'none':'');
  $('srcGrid').classList.toggle('two',ci); // класс слева, остальное справа (грид только на чугуне)
- $('sysField').style.display=(currentMat().id==='asbes'||currentMat().id==='plastic')?'none':''; // а/ц (frmtablII4) и пластик (скрины 05.10): блока режим/теплоноситель в окне нет
- $('wearField').style.display=(currentMat().id==='asbes'||currentMat().id==='plastic')?'none':''; // а/ц и пластик: переключателя новые/неновые нет — формула справедлива для обоих (справка оригинала)
- $('nuT').style.display=ci?'':'none';
- $('rhoHint').style.display=ci?'none':'';
- if(ci){$('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';$('rho').disabled=true;}
- else{const cold=document.querySelector('input[name=sys]:checked').value==='cold';
-  $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;}
+ $('sysField').style.display=noSysBlock?'none':'';
+ // неактивный блок (ж/б, чугун): затемнённый вид (.locked) и подпись, что значения заданы программой
+ $('sysField').classList.toggle('locked',locked);
+ $('sysField').querySelector('legend').textContent=locked
+   ?'Режим / теплоноситель — значения заданы программой':'Режим / теплоноситель';
+ // новые/неновые: нет у а/ц, пластика (справка оригинала) и ж/б (формула для новых и неновых)
+ $('wearField').style.display=(noSysBlock||conc)?'none':'';
+ $('nuT').style.display=locked?'':'none';
+ $('rhoHint').style.display=locked?'none':'';
+ if(locked){ // ν/ρ фиксированы и показаны нередактируемыми
+  $('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';$('rho').disabled=true;
+ }
+ if(conc){ // ж/б: параметры фиксированы и видны, но изменить их нельзя
+  $('sysCold').checked=true;fillModes(false); // система — ХВС (как в программе: ν воды 10°C)
+  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=true;});
+  $('chkMest').disabled=true;$('chkMest').checked=false; // местные сопротивления не учитываются
+  $('k').disabled=true;$('k').value='0';
+  $('mode').disabled=true;
+ } else {
+  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
+  if($('chkMest').disabled){ // ушли с ж/б-страницы — снимаем принудительную блокировку
+   $('chkMest').disabled=false;$('chkMest').checked=true;$('mode').disabled=false;$('k').disabled=false;
+  }
+  if(!locked){const cold=document.querySelector('input[name=sys]:checked').value==='cold';
+   $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;}
+ }
 }
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
@@ -62,7 +89,9 @@ function curSdr(){const r=document.querySelector('input[name=sdr]:checked');retu
 function applyClsState(){
  const m=currentMat();
  const other=$('danother').checked;
- const gated=!!(m.cls||m.pe); // чугун «другой» (frmtablII3) и пластик «не по ГОСТу» (frmtablII5): выбор блокируется, dp — ручной ввод
+ // чугун «другой» (frmtablII3), пластик «не по ГОСТу» (frmtablII5) и ж/б «другой» (ГОСТ 12586.0-83):
+ // выбор по списку блокируется, dp — ручной ввод
+ const gated=!!(m.cls||m.pe||m.id==='conc');
  document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
  document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
  $('dsel').disabled=other&&gated;
@@ -171,6 +200,12 @@ function fillDiameters(){
    $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
+  } else if(m.id==='conc'){ // ж/б (ГОСТ 12586.0-83, скрин 06.10.2026): «Внутренний диаметр, мм»
+   // + комбо d (= dв), флажок «другой» и окно ручного dp («Величины внутренних диаметров
+   // приняты по ГОСТ 12586.0-83 … установите флажок "другой"» — справка ж/б)
+   $('dLabel').textContent='Внутренний диаметр, мм:';
+   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
+   $('dpOther').style.display='';
   } else if(!m.gas){ // подписи строк — общие (для газовой страницы заданы выше)
    $('dLabel').textContent='Диаметр:';
    $('tLabel').textContent='Толщина стенки, мм:';
@@ -198,7 +233,7 @@ function findDByDv(m,dv){
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls||m.pe||m.id==='asbes') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.pe||m.id==='asbes'||m.id==='conc') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -259,6 +294,10 @@ function curDv(){
     const dn=+$('dsel').value,g=m.pe[curPe()],e=g[curSdr()]&&g[curSdr()][dn];
     return e===undefined?NaN:dn-2*e;
   }
+  if(m.id==='conc'){ // frmtablII ж/б: dв = dу (скрин: d=600 → dp=600); «другой» — ручной dp
+    if($('danother').checked) return numStrict($('dcv').value);
+    return parseFloat($('dsel').value);
+  }
   return parseFloat($('dsel').value);
 }
 
@@ -277,7 +316,9 @@ function calc(){
  if(L===0){out.innerHTML='<span class="warn">Длина участка не может равняться нулю!</span>';return;}
  const m=currentMat();
  const ci=!!m.cls; // frmtablII3: k и местных сопротивлений нет — k≡0, H=i·L (FUN_004ae2c0)
- const nomisc=ci||m.id==='asbes'||m.id==='plastic'; // а/ц (frmtablII4) и пластик (скрины 05.10.2026): locals/k в окне нет, h=i·L
+ // а/ц (frmtablII4), пластик (frmtablII5, скрины 05.10.2026) и ж/б (ГОСТ 12586.0-83, скрин 06.10.2026):
+ // блока k/местных сопротивлений в окне нет — h = i·L, k ≡ 0
+ const nomisc=ci||m.id==='asbes'||m.id==='plastic'||m.id==='conc';
  let k=nomisc?0:(numStrict($('k').value)||0);
  if(!nomisc){
   if(k<0){out.innerHTML='<span class="warn">коэффициент местных сопротивлений k не может быть отрицательным!</span>';return;}
@@ -350,7 +391,7 @@ const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="f
 function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
- const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic};
+ const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,conc:helpConc};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  h.innerHTML=hf?hf():'';
  h.style.display='block';
@@ -440,12 +481,35 @@ function helpCI(){
 function helpAsbes(){
  return `<b>асбестоцементные трубы ГОСТ 539-80</b><hr>
   Для гидравлического расчета асбестоцементных труб используют формулу:<br>
-  <i>i</i>&nbsp;=&nbsp;0,000561·${fr('v<sup>2</sup>','dp<sup>1,190</sup>')}·(1&nbsp;+&nbsp;${fr('3,51','dp')})<sup>0,190</sup><br>
+  <i>i</i>&nbsp;=&nbsp;0,000561·${fr('v<sup>2</sup>','dp<sup>1,190</sup>')}·(1&nbsp;+&nbsp;${fr('3,51','v')})<sup>0,190</sup><br>
   <i>i</i> – гидравлический уклон;&nbsp; <i>v</i> – скорость движения воды, м/с;&nbsp; dp – расчетный внутренний диаметр, м.<br><br>
   Как показал опыт эксплуатации асбетоцементных водопроводных труб, заметного возрастания их шероховатости обычно не происходит.
   Благодаря этому приведенная выше формула справедлива для расчета как новых, так и неновых водопроводных труб.<br><br>
   Величины внутренних диаметров приняты по ГОСТ 539-80. При расчете нестандартных асбестоцементных труб установите флажок
   "другой" диаметр и в окно ввода введите соответствующее значение расчетного внутреннего диаметра.`;
+}
+
+/* Справка ж/б-страницы (help-форма frmhelp6: заголовок 0x4e215, «Для гидравлического расчета
+   железобетонных труб используют формулу:» 0x4ecac, константы 0,000802/1,190/3,51 —
+   0x4ed56/0x4ee07/0x4ea36, примечания 0x4ee92 и 0x4e6ea) — дословно по скрину оригинала 06.10.2026 */
+function helpConc(){
+ return `<b>трубы железобетонные ГОСТ 12586.0-83</b><hr>
+  Для гидравлического расчета железобетонных труб используют формулу:<br>
+  <i>i</i>&nbsp;=&nbsp;0,000802·φ·${fr('v<sup>2</sup>','dp<sup>1,190</sup>')}·(1&nbsp;+&nbsp;${fr('3,51','v')})<sup>0,190</sup><br><br>
+  <i>i</i> - гидравлический уклон<br>
+  <i>v</i> - скорость движения воды, м/с<br>
+  dp - расчетный внутренний диаметр, м<br>
+  φ - коэффициент, зависящий от качества внутренней поверхности стенки трубы. Принимаем φ = 1<br><br>
+  Опыт эксплуатации железобетонных труб показал, что внутренняя поверхность стенок с течением времени практически
+  не изменяется, поэтому по приведенной выше формуле можно рассчитывать как новые, так и бывшие в употреблении
+  железобетонные трубы.<br><br>
+  Величины внутренних диаметров приняты по ГОСТ 12586.0-83. При расчете железобетонных труб не относящихся к
+  ГОСТ 12586.0-83 установите флажок "другой" и в окно ввода введите соответствующее значение расчетного
+  внутреннего диаметра.<br><br>
+  <span class="hint">Диаметры страницы — dу 500…1600 мм (9 значений списка программы), dв = dу.
+  Формула одна для новых и неновых труб (шероховатость со временем не растёт); ν воды = 1,3·10⁻⁶ м²/с
+  (t=10°C) вшита в константы, поэтому блок «Режим / теплоноситель» показан заблокированным.
+  Местные сопротивления не учитываются: H = i·L.</span>`;
 }
 
 /* Справка пластика (окно «пластмассовые трубы ГОСТ 18599-2001», скрин оригинала 05.10.2026) — дословно */

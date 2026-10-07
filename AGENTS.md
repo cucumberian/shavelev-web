@@ -20,7 +20,7 @@
 ```
 cd test && node test.js && node ui_test.js && node edge_test.js && node webmcp_test.js
 ```
-Все должны быть PASS (17 + 61 + 197 + 28). Быстрые проверки вёрстки в реальном браузере:
+Все должны быть PASS (28 + 168 + 206 + 34). Быстрые проверки вёрстки в реальном браузере:
 headless Chromium (`--headless=new --screenshot`, iframe-пробы переполнения через `--dump-dom` + `document.title`).
 
 ## Прочее

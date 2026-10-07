@@ -108,12 +108,16 @@
 
 <div>
 <fieldset class="fields"><legend>Участок</legend>
- <div class="row"><b>Расход Q:</b>
-   <span class="ctl"><input type="text" id="q">
-   <select id="qunit"><option value="ls">л/сек</option><option value="mh">м³/ч</option></select></span></div>
- <div class="row"><b>Длина L, м:</b> <input type="text" id="len"></div>
- <div class="row full"><button id="btnCalc">Расчёт</button>
-   <button id="btnHelp">Справка</button></div>
+ <div class="calcGrid">
+  <div class="calcInputs">
+   <div class="row"><b>Расход Q:</b>
+     <span class="ctl"><input type="text" id="q">
+     <select id="qunit"><option value="ls">л/сек</option><option value="mh">м³/ч</option></select></span></div>
+   <div class="row"><b>Длина L, м:</b> <input type="text" id="len"></div>
+  </div>
+  <div class="calcBtn"><button id="btnCalc">Расчёт</button></div>
+ </div>
+ <div class="row full"><button id="btnHelp">Справка</button></div>
 </fieldset>
 
 <fieldset><legend>Расчёт</legend>
