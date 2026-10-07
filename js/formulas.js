@@ -28,6 +28,13 @@ const F = {
  plastic:  v=>0.000685*Math.pow(v,-0.226),
  // стекло (9): i = 0,000745·v^1,774/dp^1,226 (код 0x50e636: {0.000745, 1.774, 1.226} ровно)
  glass:    v=>0.000745*Math.pow(v,-0.226),
+ // стеклопластик СП 40-104-2001: программа считает ДВЕ формулы, как в справке страницы:
+ //   λ = 0,0146·(v·dp)^(−0,226);  i = λ·v²/(2g·dp)  →  A = 0,0146·(v·dp)^(−0,226)/19,62, e = 1.
+ // Код FUN_0050a140: inline-double 0x3f8de69ad42c3c9f = 0,0146 (raw 0x10ac7e),
+ // DAT_004020c0 = −0,226, DAT_004011d8 = 19,62; VarPow(v·dp, −0,226) → mul 0,0146 → ·v²/(19,62·dp).
+ // Скрин оригинала 07.10.2026 (d=60 мм, Q=4 л/с): v=1,415, 1000i=43,344 — сходится 1-в-1
+ // (свёрнутая форма 0,000745·v^1,774/dp^1,226 даёт 43,363, т.е. НЕ эта формула).
+ grp:      (v,dp)=>0.0146*Math.pow(v*dp,-0.226)/G2,
 };
 
 /* Выбор формулы по материалу/состоянию.
@@ -44,7 +51,8 @@ function iCalc(wear, mat, v, d){
   }
   if(mat==='asbes')   return {A:F.asbes(v),  e:1.190};
   if(mat==='conc')    return {A:F.conc(v),   e:1.190};
-  if(mat==='plastic'||mat==='pex'||mat==='metal-pex'||mat==='grp') return {A:F.plastic(v), e:1.226};
+  if(mat==='plastic'||mat==='pex'||mat==='metal-pex') return {A:F.plastic(v), e:1.226};
+  if(mat==='grp')     return {A:F.grp(v,d),  e:1};      // λ=0,0146(v·dp)^−0,226; i=λ·v²/(2g·dp)
   if(mat==='glass')   return {A:F.glass(v),  e:1.226};
   return {A:F.oldA(), e:1.3};
 }

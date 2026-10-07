@@ -55,7 +55,7 @@ function setWear(w){
 /* Страницы с зафиксированными параметрами теплоносителя: чугун (frmtablII3) и ж/б (ГОСТ 12586.0-83).
    На них нет переключателя новые/неновые, режима, местных сопротивлений и выбора ν/ρ — параметры
    программы (ν=1,3·10⁻⁶ = t=10°C; ρ=1000; h=i·L), поэтому mode/ν/ρ/k в configure игнорируются. */
-function fixedSys(){const m=currentMat();return !!m.cls||m.id==='conc';}
+function fixedSys(){const m=currentMat();return !!m.cls||m.id==='conc'||m.id==='grp';} // ci, ж/б, стеклопластик
 function setPipeClass(c){
   const m=currentMat();
   if(!m.cls) throw new Error('классы (ЛА/А/Б) есть только у чугунных труб');
@@ -111,7 +111,7 @@ const TOOLS=[
         id:m.id,name:m.name,
         diameters_mm:m.id==='asbes'? m.vt.map(v=>v.du) : (m.pe? [...$('dsel').options].map(o=>+o.value) : (m.gas? m.gas.dn : (m.cls? (m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b)) : m.d))),
         has_wall_thickness:!!(m.wall||m.gas),
-        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка ПЭ и серия SDR выбираются в UI, diameter_mm=dн)':(m.id==='conc'?'dв=dу (ГОСТ 12586.0-83: 500…1600 мм, 9 значений); «другой» — ручной dp':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv'))))),
+        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка ПЭ и серия SDR выбираются в UI, diameter_mm=dн)':(m.id==='conc'?'dв=dу (ГОСТ 12586.0-83: 500…1600 мм, 9 значений); «другой» — ручной dp':(m.id==='grp'?'dв=d (СП40-104-2001: 50…400 мм, 13 значений списка программы); «другой» — ручной dp':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv')))))),
         pipe_classes:m.cls?Object.keys(m.cls):undefined
       })),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
@@ -156,12 +156,12 @@ const TOOLS=[
  },
  {
   name:'shev-calculate',
-  description:'Выполняет гидравлический расчёт участка (как кнопка «Расчёт»): скорость v, удельные потери i (мм/м) и R (Па/м), потери напора H=i·L·(1+k) (для ci и conc — H=i·L, местные сопротивления отсутствуют), потери давления (Па), предупреждения о скорости и экономическая рекомендация по диаметру. Параметры расхода/длины/местных сопротивлений опциональны — без них берутся текущие значения UI.',
+  description:'Выполняет гидравлический расчёт участка (как кнопка «Расчёт»): скорость v, удельные потери i (мм/м) и R (Па/м), потери напора H=i·L·(1+k) (для ci, conc и grp — H=i·L, местные сопротивления отсутствуют), потери давления (Па), предупреждения о скорости и экономическая рекомендация по диаметру. Параметры расхода/длины/местных сопротивлений опциональны — без них берутся текущие значения UI.',
   inputSchema:{type:'object',properties:{
     q:{type:'number',description:'расход (по умолчанию л/с)'},
     qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
     length_m:{type:'number',description:'длина участка L, м'},
-    k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci и conc: там H=i·L)'}
+    k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci, conc и grp: там H=i·L)'}
   }},
   async execute(a){
     if(a.q!==undefined){ $('q').value=String(a.q); }
@@ -181,7 +181,7 @@ const TOOLS=[
   inputSchema:{type:'object',properties:{}},
   async execute(){
     return textResult({
-      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci и ж/б H=i·L; g=9.81',
+      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б и стеклопластика H=i·L; g=9.81',
       formulas:{
         steel_new:'λ=0.0159·(1+0.684/v)^0.226/d^0.226',
         ci_new:'λ=0.0144·(1+2.36/v)^0.284/d^0.284',
@@ -189,8 +189,9 @@ const TOOLS=[
         old_v_lt_1_2:'A=0.000912·(1+0.867/v)^0.3; e=1.3',
         asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19',
         conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19',
-        plastic_grp_pex:'i=0.000685·v^1.774/dp^1.226',
-        glass:'i=0.000745·v^1.774/dp^1.226'
+        plastic_pex:'i=0.000685·v^1.774/dp^1.226',
+        glass:'i=0.000745·v^1.774/dp^1.226',
+        grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/19.62, e=1) — СП 40-104-2001'
       },
       source:'кн. Шевелевы 1984; программа «Таблицы Шевелева» ver 3.0, БрГТУ 2008'
     });
