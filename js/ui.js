@@ -1,17 +1,10 @@
-/* ui.js — логика интерфейса клона: заполнение списков, валидация ввода, расчёт, справка.
-   Зависимости (загружаются раньше в index.html): formulas.js, data.js. */
+/* ui.js — логика интерфейса клона: заполнение списков, чтение контролов, вывод, справка.
+   Зависимости (загружаются раньше в index.html): formulas.js, data.js, calc.js.
+   ВСЕ вычисления — в calc.js (shevCalc, velocity, gradient, speedNotes, recommendation, fmt);
+   здесь только DOM: взять значения контролов → вызвать движок → нарисовать результат. */
 "use strict";
 
 const $=id=>document.getElementById(id);
-function fmt(x,n){
- if(x!==0 && Math.abs(x)<Math.pow(10,-n)){
-   // малые значения: добавляем знаки, чтобы не округлять до 0 (BUG-7)
-   let s=x.toFixed(n+8).replace(/0+$/,'').replace(/\.$/,'');
-   return s.replace('.',',');
- }
- return (Math.round(x*Math.pow(10,n))/Math.pow(10,n)).toString().replace('.',',');
-}
-function fmt2(x){return x.toFixed(2).replace('.',',');}
 
 function fillMaterials(){
  const sel=$('material');
@@ -31,47 +24,42 @@ function fillModes(keep){
 }
 
 /* Видимость блоков «Трубы» (новые/неновые) и «Режим / теплоноситель» по странице материала.
-   • чугун (frmtablII3): переключателя ХВС/ГВС, режимов и местных сопротивлений в окне нет —
-     строки скрываем, ν/ρ фиксируем (t=10°C) и показываем подсказкой;
-   • а/ц (frmtablII4) и пластик (frmtablII5): блока «Режим / теплоноситель» в окне нет вовсе;
-   • ж/б ГОСТ 12586.0-83 (скрин оригинала 06.10.2026) и стеклопластик СП 40-104-2001
-     (скрин 07.10.2026): в окне нет ни «новые/неновые», ни режима/местных сопротивлений, ни
-     ν/ρ — параметры фиксированы. Показываем их ЗАБЛОКИРОВАННЫМИ и затемнённым классом .locked
-     (видно, какие значения применены, но в них нельзя нажать); h = i·L, k не учитывается
-     (справки обеих страниц: формула одна для новых и неновых труб). */
+   Критерий один: блок показываем только там, где его данные участвуют в формулах и где он есть
+   в оригинальном окне (шаблоны форм EXE; см. calc.js — usesSys/usesWear/usesK).
+    • сталь ВГП (frmtablII11) и электросварная (frmtablII2): Frame4 «Выбор системы» с Option5
+      «холодного водоснабжения» / Option6 «горячего водоснабжения» и полем t= °C (Label21),
+      Check2 «учесть потери на местные сопротивления» + k → блок активен;
+    • чугун (frmtablII3): режима, t, ν/ρ и местных сопротивлений в окне нет (H = i·L), но есть
+      классы ЛА/А/Б и Option3/4 «новые/неновые» → блок убран, переключатель труб оставлен;
+    • а/ц, пластик, PEX, PEX-AL-PEX, ж/б, стеклопластик, стекло: в окне нет ни режима, ни ν/ρ,
+      ни k, ни «новые/неновые» → блок УБРАН ЦЕЛИКОМ. Значения, которые он подразумевал,
+      фиксированы самой программой: ν = 1,3·10⁻⁶ м²/с (t = 10 °C, вшита в константы A),
+      ρ = 1000 кг/м³, k ≡ 0 → H = i·L; предупреждений по скорости в этих calc-функциях нет. */
 function applySysVisibility(){
  const m=currentMat(), id=m.id;
- const ci=!!m.cls, conc=id==='conc', grp=id==='grp';
- const locked=ci||conc||grp; // ν/ρ заданы программой (ν=1,3·10⁻⁶ = t=10°C вшита в константы)
- const noSysBlock=(id==='asbes'||id==='plastic');
+ const ci=!!m.cls, sys=usesSys(id);            // режим/теплоноситель нужен только стали и э/с
+ $('sysField').style.display=sys?'':'none';    // на остальных страницах блока нет вовсе
  ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display=ci?'none':'');
- $('srcGrid').classList.toggle('two',ci); // класс слева, остальное справа (грид только на чугуне)
- $('sysField').style.display=noSysBlock?'none':'';
- // неактивный блок (ж/б, чугун): затемнённый вид (.locked) и подпись, что значения заданы программой
- $('sysField').classList.toggle('locked',locked);
- $('sysField').querySelector('legend').textContent=locked
-   ?'Режим / теплоноситель — значения заданы программой':'Режим / теплоноситель';
- // новые/неновые: нет у а/ц, пластика (справка оригинала), ж/б и стеклопластика
- // (формула одна для новых и неновых труб)
- $('wearField').style.display=(noSysBlock||conc||grp)?'none':'';
- $('nuT').style.display=locked?'':'none';
- $('rhoHint').style.display=locked?'none':'';
- if(locked){ // ν/ρ фиксированы и показаны нередактируемыми
-  $('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';$('rho').disabled=true;
- }
- if(conc||grp){ // ж/б и стеклопластик: параметры фиксированы и видны, но изменить их нельзя
-  $('sysCold').checked=true;fillModes(false); // система — ХВС (как в программе: ν воды 10°C)
-  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=true;});
-  $('chkMest').disabled=true;$('chkMest').checked=false; // местные сопротивления не учитываются
-  $('k').disabled=true;$('k').value='0';
-  $('mode').disabled=true;
+ $('srcGrid').classList.toggle('two',ci);      // класс слева, остальное справа (грид только на чугуне)
+ $('sysField').classList.remove('locked');
+ $('sysField').querySelector('legend').textContent='Режим / теплоноситель';
+ $('wearField').style.display=usesWear(id)?'':'none'; // «новые/неновые» только у стали, э/с и чугуна
+ $('hLegend').textContent=usesK(id)?'Потери напора на участке, м':'Потери напора по длине, м';
+ $('nuT').style.display='none';                    // подсказка «t=10°C (как в программе)» была у заблокированного блока
+ $('rhoHint').style.display=sys?'':'none';           // «для ГВС рекомендуется t=60°C» — только где есть ГВС
+ document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
+ if(!sys){
+  // блок скрыт, но значения, которые реально участвуют в расчёте, держим в полях (ν=1,3·10⁻⁶ =
+  // t=10°C вшита в константы A, ρ=1000, k≡0 → H=i·L) и запоминаем, что чекбокс снят принудительно
+  $('nu').value='1.3e-6';$('nu').disabled=false;$('nuPreset').disabled=false;
+  $('rho').value='1000';$('rho').disabled=false;
+  $('mode').disabled=false;$('k').disabled=false;$('k').value='0';
+  $('chkMest').checked=false;$('chkMest').dataset.forced='1';
  } else {
-  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
-  if($('chkMest').disabled){ // ушли с ж/б-страницы — снимаем принудительную блокировку
-   $('chkMest').disabled=false;$('chkMest').checked=true;$('mode').disabled=false;$('k').disabled=false;
-  }
-  if(!locked){const cold=document.querySelector('input[name=sys]:checked').value==='cold';
-   $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;}
+  if($('chkMest').dataset.forced){ delete $('chkMest').dataset.forced; $('chkMest').checked=true; } // вернулись на сталь/э/с
+  $('chkMest').disabled=false;$('mode').disabled=false;$('k').disabled=false;
+  const cold=document.querySelector('input[name=sys]:checked').value==='cold';
+  $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;
  }
 }
 
@@ -93,7 +81,7 @@ function applyClsState(){
  const other=$('danother').checked;
  // чугун «другой» (frmtablII3), пластик «не по ГОСТу» (frmtablII5), ж/б «другой» (ГОСТ 12586.0-83)
  // и стеклопластик «другой» (СП40-104-2001): выбор по списку блокируется, dp — ручной ввод
- const gated=!!(m.cls||m.pe||m.id==='conc'||m.id==='grp');
+ const gated=!!(m.cls||m.pe||m.id==='conc'||m.id==='grp'||m.id==='glass');
  document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
  document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
  $('dsel').disabled=other&&gated;
@@ -170,9 +158,10 @@ function fillDiameters(){
    m.d.forEach((d,i)=>{
      const o=document.createElement('option');
      // wall-материалы (электросварка): d — наружный, dв=d−2s считается по выбранной стенке
-     const dv=(m.wall||m.dvSame)? d : m.dv[i];
-     o.value=dv;
-     o.textContent=m.wall? `dн=${d} мм` : (m.dvSame?`dв=${d} мм`:`dу/dн=${d} мм (dв=${dv} мм)`);
+     // dvMap (стекло): в комбо НАРУЖНЫЙ dн, dв подставляет программа по таблице (скрин 93 → 81)
+     const dv=m.dvMap? m.dvMap[d] : ((m.wall||m.dvSame)? d : m.dv[i]);
+     o.value=m.dvMap? d : dv;
+     o.textContent=(m.wall||m.dvMap)? `dн=${d} мм` : (m.dvSame?`dв=${d} мм`:`dу/dн=${d} мм (dв=${dv} мм)`);
      sel.appendChild(o);});
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
    const showWall = !!m.wall;
@@ -199,6 +188,11 @@ function fillDiameters(){
    $('dvLabel').innerHTML='Внутренний диаметр dp, мм:';
    $('dpOther').style.display='';
   } else if(m.pe){ // frmtablII5: dн + dв + «не по ГОСТу» (Check1, 0x5fcfe)
+   $('dLabel').textContent='Наружный диаметр dн, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
+   $('dpOther').style.display='';
+  } else if(m.dvMap){ // frmtablII8 стекло (скрин 07.10.2026): рамка «Диаметр, мм» — комбо dн,
+   // предзаполненное dв из таблицы программы, флажок «другой» + окно ручного dp
    $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
@@ -229,13 +223,13 @@ function updCiDims(){
  row.classList.toggle('dimmed',$('danother').checked);
 }
 function findDByDv(m,dv){
- if(m.wall||m.gas) return dv; // у wall/gas-материалов dsel.value уже = dн
+ if(m.wall||m.gas||m.dvMap) return dv; // у wall/gas/dvMap-материалов dsel.value уже = dн
  for(let i=0;i<m.d.length;i++) if(m.dv[i]===dv) return m.d[i];
  return m.d[0];
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls||m.pe||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.pe||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -296,6 +290,11 @@ function curDv(){
     const dn=+$('dsel').value,g=m.pe[curPe()],e=g[curSdr()]&&g[curSdr()][dn];
     return e===undefined?NaN:dn-2*e;
   }
+  if(m.dvMap){ // frmtablII8 стекло (скрин 07.10.2026): dн из комбо → dв из таблицы программы
+                 // (93 → 81); «другой» — ручной dp (FUN_0050d4c0)
+    if($('danother').checked) return numStrict($('dcv').value);
+    return m.dvMap[+$('dsel').value];
+  }
   if(m.id==='conc'||m.id==='grp'){ // frmtablII ж/б (скрин: d=600 → dp=600) и стеклопластик
     // (скрин: d=60 → dp=60): dв = d из списка; «другой» — ручной dp
     if($('danother').checked) return numStrict($('dcv').value);
@@ -304,90 +303,37 @@ function curDv(){
   return parseFloat($('dsel').value);
 }
 
+/* Расчёт: здесь ТОЛЬКО чтение контролов и вывод. Валидация, v, i, R, H, предупреждения и
+   строка рекомендации — в calc.js (shevCalc). dpOf(d) остаётся в ui.js, потому что зависит от
+   контролов: стенка (газовые/э/с), класс и «неновые» (чугун), SDR (ПЭ). */
 function calc(){
  const out=$('out');
  $('outH').innerHTML='—';
- const q=readQ();
- if(isNaN(q)){out.innerHTML='<span class="warn">ошибка ввода — введите значение расхода</span>';return;}
- if(q<0){out.innerHTML='<span class="warn">расход не должен быть отрицательным!</span>';return;}
- if(q===0){out.innerHTML='<span class="warn">расход не должен равняться нулю!</span>';return;}
- const dv=curDv();
- if(isNaN(dv)||dv<=0){out.innerHTML='<span class="warn">диаметр не может равняться нулю!</span>';return;}
- const L=numStrict($('len').value);
- if(isNaN(L)){out.innerHTML='<span class="warn">введите значение длины участка в м</span>';return;}
- if(L<0){out.innerHTML='<span class="warn">Длина участка не может быть отрицательной!</span>';return;}
- if(L===0){out.innerHTML='<span class="warn">Длина участка не может равняться нулю!</span>';return;}
  const m=currentMat();
- const ci=!!m.cls; // frmtablII3: k и местных сопротивлений нет — k≡0, H=i·L (FUN_004ae2c0)
- // а/ц (frmtablII4), пластик (frmtablII5, скрины 05.10.2026) и ж/б (ГОСТ 12586.0-83, скрин 06.10.2026):
- // блока k/местных сопротивлений в окне нет — h = i·L, k ≡ 0
- const nomisc=ci||m.id==='asbes'||m.id==='plastic'||m.id==='conc'||m.id==='grp';
- let k=nomisc?0:(numStrict($('k').value)||0);
- if(!nomisc){
-  if(k<0){out.innerHTML='<span class="warn">коэффициент местных сопротивлений k не может быть отрицательным!</span>';return;}
-  if(!$('chkMest').checked) k=0; // «учесть потери на местные сопротивления» выключен — k не применяется
- }
- if(!nomisc){const nu=numStrict($('nu').value); // ν-поле в окне пластика/а/ц отсутствует — и проверки его нет
-  if(isNaN(nu)){out.innerHTML='<span class="warn">Вы не ввели значение коэффициента кинематической вязкости теплоносителя!</span>';return;}}
- const rho=numStrict($('rho').value)||1000;
- const wear=document.querySelector('input[name=wear]:checked').value;
- const d=dv/1000;
- const v=q/(Math.PI*d*d/4);
- const {A,e}=iCalc(wear,m.id,v,d);
- const i=A*v*v/Math.pow(d,e);   // м/м
- const R=i*rho*G;               // Па/м (ρ·g·i, g=9.81)
- const H=i*L*(1+k);             // м
- const lines=[];
- lines.push(`Скорость v = ${fmt(v,3)} м/с`);
- // 1000i — как в программе: rtcRound(1000·i, 3) без лишних нулей (FUN_0050a140: rtcRound(...,3);
- // скрин стеклопластика 1000i=43,344; ж/б 0,151; сталь 50)
- lines.push(`i = ${fmt(i*1000,3)} мм/м  (1000i = ${fmt(i*1000,3)})`);
- lines.push(`удельные потери давления R = ${fmt(R,1)} Па/м`);
- // блок «Потери напора…» — как в программе: чугун (Frame4 «по длине») H=i·L без k; прочие — i·L·(1+k)
- $('hLegend').textContent=nomisc?'Потери напора по длине, м':'Потери напора на участке, м';
- $('outH').innerHTML=(nomisc?[]:[`k = ${fmt(k,2)}`]).concat(
-   [`Потери напора ${nomisc?'по длине':'на участке'} H = i·L${nomisc?'':'·(1+k)'} = ${fmt(H,3)} м`,
-    `потери давления = ${fmt(R*L*(1+k),0)} Па`]).join('\n');
- const cls=[];
- if(ci){ // frmtablII3 (FUN_004ae2c0): пары порогов 0,8…2 / 1…3 / 1,5…4 по диаметру (живая программа 05.10.2026):
-  // dp≤200 → 0,8…2 (dp=99/100/150/200: v=0,95…1,23 нет; v=2,494 «Большая»); 200<dp<800 → 1…3 (dp=202,6 «Малая» при 0,931;
-  // dp=500,8 1,015 нет; dp=700 1,2 нет); dp≥800 → 1,5…4 (dp=820 «Малая» при 0,899 и 1,201; v=2,462 нет).
-  // Границы 200/800 подтверждены живой программой (пробы X1 dp=200 → нет; X2 dp=820 v=1,201 → «Малая»).
-  const lo=dv<=200?0.8:(dv<800?1:1.5), hi=dv<=200?2:(dv<800?3:4);
-  if(v>hi) cls.push('<span class="warn">Большая скорость! Рекомендуется увеличить диаметр</span>');
-  if(v<lo) cls.push('<span class="warn">Малая скорость! Рекомендуется уменьшить диаметр</span>');
- } else if(m.id!=='asbes'&&m.id!=='plastic'){ // а/ц и пластик: скоростных предупреждений в окне нет — только эконом-строка (скрины 05.10.2026)
-  const lim=VEL_LIMIT[$('mode').value]||VEL_LIMIT.potable; // защита от пустого mode
-  if(v>lim[1]) cls.push(`<span class="warn">Внимание! Скорость больше ${lim[1]} м/с, рекомендуется увеличить диаметр</span>`);
-  if(v<lim[0]) cls.push(`<span class="warn">Малая скорость! Рекомендуется уменьшить диаметр</span>`);
- }
- // Блок рекомендации — как в программе: подписи существуют только для рядов своей таблицы (BSTR
- // 0x44fd4..0x47434, ряды в ECON_ROWS). opt = минимальный ряд с v ≤ VREC на его dв; sel==opt →
- // «экономически обосновано» про выбранный, иначе → «рекомендуется использовать трубу …opt…».
- // Тексты — дословные шаблоны EXE («л/сек = … м куб/ч»). Порог VREC — гипотеза (см. data.js).
- const rows=ECON_ROWS[m.id];
- if(rows){
-   const qls=q*1000,m3=q*3600;
-   const dpOf=(d)=>{
-     if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
-       const dn=+it[0],s=parseFloat($('tsel').value);return isNaN(s)?NaN:dn-2*s-1;}
-     if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
-       return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
-     if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
-     return d; // ж/б: dв = dу
-   };
-   const vrow=d=>{const dp=dpOf(d);if(isNaN(dp))return NaN;const dm=dp/1000;return q/(Math.PI*dm*dm/4);};
-   const selD=m.gas?m.gas.du[$('dsel').value]:+$('dsel').value;
-   let opt=null;for(const d of rows){const v2=vrow(d);if(!isNaN(v2)&&v2<=VREC){opt=d;break;}}
-   if(opt===null&&m.id!=='steel'&&m.id!=='conc')opt=rows[rows.length-1]; // чугун/пластик: кламп к максимуму — «более» строк нет
-   const word=m.pe?'диаметром':'с условным проходом';
-   if(opt===null)cls.push(m.id==='steel'
-     ?`<span class="warn">Большая скорость! При расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч рекомендуется использовать трубу с диаметром более 500мм</span>`
-     :`<span class="warn">Большая скорость! Рекомендуется использовать трубу с условным проходом более 1600мм</span>`);
-   else if(opt===selD)cls.push(`<span class="ok">Применение трубы ${word} ${opt}мм при расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч экономически обосновано</span>`);
-   else cls.push(`<span class="warn">При расходе ${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч рекомендуется использовать трубу ${word} ${opt}мм</span>`);
- }
- out.innerHTML=lines.join('\n')+'\n'+cls.join('\n');
+ const dpOf=(d)=>{
+   if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
+     const dn=+it[0],s=parseFloat($('tsel').value);return isNaN(s)?NaN:dn-2*s-1;}
+   if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
+     return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
+   if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
+   return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
+ };
+ const r=shevCalc({
+   mat:m.id,
+   wear:document.querySelector('input[name=wear]:checked').value,
+   dv_mm:curDv(),
+   q:numStrict($('q').value), qunit:$('qunit').value,
+   L:numStrict($('len').value),
+   k:numStrict($('k').value), mest:$('chkMest').checked,
+   nu:numStrict($('nu').value), rho:numStrict($('rho').value),
+   mode:$('mode').value,
+   selD:m.gas?m.gas.du[$('dsel').value]:+$('dsel').value,
+   dpOf,
+ });
+ if(!r.ok){out.innerHTML=`<span class="warn">${r.error}</span>`;return;}
+ $('hLegend').textContent=r.hLegend;
+ out.innerHTML=r.lines.join('\n')+'\n'+r.notes.map(n=>`<span class="${n.cls}">${n.text}</span>`).join('\n');
+ $('outH').innerHTML=r.outH.join('\n');
 }
 
 /* Дробь для «печатного» вида формул (офлайн: чистый CSS, без KaTeX/MathJax). */
@@ -397,7 +343,7 @@ function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
  const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
-  conc:helpConc,grp:helpGrp};
+  conc:helpConc,grp:helpGrp,glass:helpGlass};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  h.innerHTML=hf?hf():'';
  h.style.display='block';
@@ -544,6 +490,30 @@ function helpGrp(){
   ν воды = 1,3·10⁻⁶ м²/с (t=10°C) вшита в константы, поэтому блок «Режим / теплоноситель» показан
   заблокированным. Местные сопротивления не учитываются: H = i·L. Эталон скрина: d = 60 мм,
   Q = 4 л/с → v = 1,415 м/с, 1000i = 43,344 мм/м, h = i·L = 4,334 м (L = 100 м).</span>`;
+}
+
+/* Справка стеклянной страницы (окно «трубы стеклянные ГОСТ 8894-86», скрин оригинала 07.10.2026) —
+   тексты дословно из EXE (frmhelp8): зачин 0x4ac94, абзац о коррозии 0x4abd9, абзац о диаметрах 0x4ab11.
+   В EXE в последнем абзаце опечатка «стеклянных труб труб не относящихся» (воспроизведена и на скрине
+   оригинала) — в клоне напечатано «стеклянных труб не относящихся». */
+function helpGlass(){
+ return `<b>трубы стеклянные ГОСТ 8894-86</b><hr>
+  Для гидравлического расчета стеклянных труб используют формулу:<br>
+  <i>i</i>&nbsp;=&nbsp;0,000745·${fr('v<sup>1,774</sup>','dp<sup>1,226</sup>')}<br><br>
+  <i>i</i> - гидравлический уклон<br>
+  <i>v</i> - скорость движения воды, м/с<br>
+  dp - расчетный внутренний диаметр, м<br><br>
+  Стеклянные трубы весьма стойки против коррозии, благодаря чему приведенная выше формула справедлива как
+  для новых, так и для неновых стеклянных труб.<br><br>
+  Величины диаметров приняты по ГОСТ 8894-86. При расчете стеклянных труб не относящихся к
+  ГОСТ 8894-86 установите флажок "другой" и в окно ввода введите соответствующее значение расчетного
+  внутреннего диаметра.<br><br>
+  <span class="hint">Список страницы — наружные диаметры 45, 67, 93, 122, 169, 221 мм (6 значений списка
+  программы); внутренний dв подставляется программой по таблице: 45→37, 67→57, 93→81, 122→108,
+  169→150, 221→198 мм. Формула одна для новых и неновых труб; ν воды = 1,3·10⁻⁶ м²/с (t=10°C) вшита в
+  константы, поэтому блок «Режим / теплоноситель» показан заблокированным. Местные сопротивления не
+  учитываются: H = i·L. Эталон скрина: dн = 93 мм (dв = 81 мм), Q = 7 л/с → v = 1,358 м/с,
+  1000i = 27,949 мм/м, h = i·L = 2,795 м (L = 100 м).</span>`;
 }
 
 /* Справка пластика (окно «пластмассовые трубы ГОСТ 18599-2001», скрин оригинала 05.10.2026) — дословно */
