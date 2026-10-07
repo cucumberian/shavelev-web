@@ -71,11 +71,28 @@ function applySysVisibility(){
    Option8 «другой» + Text18 ρ + Text3 ν) и Frame6 «Местные сопротивления» (Check1–12 + Text5–17
    «шт.», Check14 «другие» + Text17, Label11 «Sx=», Command4 «Сброс»). */
 function applyCopperVisibility(id){
- const cu = id==='copper';
+ const m=MATERIALS.find(x=>x.id===id);
+ const cu = id==='copper' || id==='pex';
  ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=cu?'':'none');
- // на медной странице нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
+ // на этих страницах нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
  if(cu){ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none'); }
- if(cu) cuSysSync();
+ if(cu){
+  // Frame2 «Выбор системы»: у меди Option1–4 (шаблон 0x6fb58), у PEX Option1–3 (слоты 0x388
+  // «холодного водоснабжения», 0x38c «горячего водоснабжения», 0x384 «отопления») — набор кнопок
+  // и подписи пересобираются по данным материала
+  const map = id==='copper' ? m.cuSys : m.pexSys;
+  const box=$('cuSysField').querySelector('.cusys');
+  const prev=(document.querySelector('input[name=cusys]:checked')||{}).value;
+  box.innerHTML='';
+  Object.keys(map).forEach(k=>{
+   const lab=document.createElement('label');
+   lab.innerHTML=`<input type="radio" name="cusys" value="${k}"${k===prev?' checked':''}> ${map[k].cap}`;
+   box.appendChild(lab);
+  });
+  if(!document.querySelector('input[name=cusys]:checked')) box.querySelector('input').checked=true;
+  box.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=cuSysSync);
+  cuSysSync();
+ }
 }
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
@@ -86,6 +103,10 @@ function curTip(){const r=document.querySelector('input[name=tip]:checked');retu
 /* пластик (frmtablII5): марка полиэтилена (Option1–4) и серия SDR (Option5–13) */
 function curPe(){const r=document.querySelector('input[name=pe]:checked');return r?r.value:'32';}
 function curSdr(){const r=document.querySelector('input[name=sdr]:checked');return r?r.value:null;}
+/* PEX (frmtablII10): серия труб (Option4/9/10/11/12) и строка сортамента [S, ΔS, Δd] для dн */
+function curPexSdr(){const r=document.querySelector('input[name=pexsdr]:checked');return r?r.value:'sdr136';}
+function pexRow(){const m=currentMat(); if(!m.series) return null;
+ const s=m.series.find(x=>x.id===curPexSdr())||m.series[0]; return s.t[+$('dsel').value]||null;}
 
 /* Состояние блока исходных данных (frmtablII3, проверка на живой программе):
    «другой» свободен при любом классе/dу; при включении блокируется весь блок —
@@ -96,9 +117,10 @@ function applyClsState(){
  const other=$('danother').checked;
  // чугун «другой» (frmtablII3), пластик «не по ГОСТу» (frmtablII5), ж/б «другой» (ГОСТ 12586.0-83)
  // и стеклопластик «другой» (СП40-104-2001): выбор по списку блокируется, dp — ручной ввод
- const gated=!!(m.cls||m.pe||m.sMap||m.id==='conc'||m.id==='grp'||m.id==='glass');
+ const gated=!!(m.cls||m.pe||m.sMap||m.series||m.id==='conc'||m.id==='grp'||m.id==='glass');
  document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
  document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
+ document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.disabled=other&&!!m.series);
  $('dsel').disabled=other&&gated;
  $('dcv').disabled=!other;
 }
@@ -111,6 +133,7 @@ function fillDiameters(){
  $('clsRow').style.display=m.cls?'':'none';
  $('vtRow').style.display='none'; $('tipRow').style.display='none'; // селекторы а/ц — только на своей странице
  $('peRow').style.display='none'; $('sdrRow').style.display='none'; // блоки пластика — только на своей странице
+ $('pexSdrRow').style.display='none'; // рамка «Серия труб» PEX — только на своей странице
  $('dpOtherCap').textContent=m.pe?'не по ГОСТу':'другой'; // Check1 frmtablII5 озаглавлен иначе, чем «другой» прочих страниц
  if(m.gas){
    // frmtablII1: dн → связанная стенка S → dp = dн − 2s − 1
@@ -162,6 +185,24 @@ function fillDiameters(){
    Object.keys(col).map(Number).sort((a,b)=>a-b).forEach(dn=>{
      const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+ } else if(m.series){
+   // frmtablII10 PEX (СП 41-109-2005 табл. 1): рамка «Серия труб» — Option4 «SDR 13,6 (S6,3)»,
+   // Option9 «SDR 11 (S5)», Option10 «SDR 9 (4)», Option11 «SDR 7,4 (S3,2)», Option12 «SDR 6 (2,5)»;
+   // комбо dн пересобирается (Clear 0x1e8 + AddItem 0x1ec): 0x5340e0 → 16…110 (10 значений),
+   // 0x5312b0 и 0x534920 → 12,16,18,20,22,25…110 (13), 0x531910 и 0x531fd0 → 12,15,16…110 (14).
+   // Это ровно строки табл. 1, где для выбранной серии есть S (у SDR 13,6 прочерк у 12, 15, 18, 22;
+   // у SDR 11 и SDR 9 — у 15).
+   $('pexSdrRow').style.display='';
+   $('thicknessRow').style.display='none';
+   const col=(m.series.find(s=>s.id===curPexSdr())||m.series[0]).t;
+   // null — строка табл. 1 без толщины для этой серии (у SDR 13,6 это 12, 15, 18, 22): в комбо
+   // программы их нет (AddItem 0x5340e0 даёт ровно 16…110)
+   Object.keys(col).filter(dn=>col[dn]).map(Number).sort((a,b)=>a-b).forEach(dn=>{
+    const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
+   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+   $('dLabel').textContent='Наружный диаметр dн, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
+   $('dpOther').style.display='';
  } else if(m.sMap){
    // frmtablII9 медь (СП 40-108-2004): комбо dн (20 значений, FUN_00510a20) → комбо толщин S
    // (FUN_00512ce0, 20 групп в порядке dн) → dв = dн − 2S (FUN_005148a0)
@@ -205,6 +246,10 @@ function fillDiameters(){
  } else if(m.sMap){ // frmtablII9 медь: рамка «Диаметр трубы, мм» — dн + S + dв + «другой» (Check13)
    $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('tLabel').textContent='Толщина стенки S, мм:';
+   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
+   $('dpOther').style.display='';
+ } else if(m.series){ // frmtablII10 PEX: dн + dв (подставляет программа) + «другой dв» (Check13 0x300)
+   $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
  } else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
@@ -258,7 +303,7 @@ function findDByDv(m,dv){
 }
 function updDv(){
  const m=currentMat();
- if((m.gas||m.wall||m.cls||m.pe||m.sMap||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if((m.gas||m.wall||m.cls||m.pe||m.sMap||m.series||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
@@ -293,6 +338,17 @@ function readQ(){
 }
 function curDv(){
  const m=currentMat();
+ if(m.series){ // frmtablII10 PEX: Combo1_Click FUN_00522aa0 → Text2 (слот 0x304). На каждый
+   // диаметр в EXE лежат (S, ΔS, Δd) из табл. 1 СП 41-109 (dн=16 и SDR 13,6 → 1,3; 0,4; 0,3),
+   // арифметика 0x5263e9…0x5264ca (int 2 @0x5263f4, int 4 @0x526457, 0,5 @0x526437) →
+   // dв = 0,5(2dн + Δd − 4(S+ΔS)) = dн − 2(S+ΔS) + Δd/2 = 16 − 3,4 + 0,15 = 12,75 — ровно как в
+   // оригинале (скрин 07.10.2026: dн=16, «SDR 13,6 (S6,3)» → dв=12,75 и v=23,497 ✓).
+   // Формула (5) СП 41-109 «dр = 0,5(2dн + Δdн − 4S − 2ΔS)» дала бы 13,15; вариант dн − 2,5S тоже
+   // даёт 12,75, но не использует ΔS и Δd. Уточняется по живым показаниям других серий.
+   if($('danother').checked) return numStrict($('dcv').value);   // Check13 «другой dв»
+   const r=pexRow(); if(!r) return NaN;
+   return +$('dsel').value - 2*(r[0]+r[1]) + r[2]/2;
+  }
  if(m.sMap){ // frmtablII9 медь: dв = dн − 2S (FUN_005148a0: fld S → fadd st(0),st(0) → __vbaVarSub(dн, 2S)
              // @0x514aa6 → формат с «,» (0x441884/0x44188c) → Text2 (слот 0x54c) @0x514b56)
    if($('danother').checked) return numStrict($('dcv').value);
@@ -381,7 +437,7 @@ function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
  const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
-  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper};
+  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  h.innerHTML=hf?hf():'';
  h.style.display='block';
@@ -573,7 +629,10 @@ function helpPlastic(){
 }
 
 /* ==== медная страница (frmtablII9, СП 40-108-2004) ==== */
-function cuMat(){ return MATERIALS.find(x=>x.id==='copper') }
+/* Страница меди ИЛИ PEX: обе пользуются блоками Frame4 «Температура» / Frame5 «Теплоноситель».
+   Таблица ν/ρ берётся КОНКРЕТНОЙ страницы: у меди t=90 → 0,36·10⁻⁶ (DAT_00402428 @0x5166da-цепочка),
+   у PEX t=90 → 0,32·10⁻⁶ (DAT_00402670 @0x527da9/@0x5281b7) — таблицы различаются на этом шаге. */
+function cuMat(){ const m=currentMat(); return m&&(m.id==='copper'||m.id==='pex')?m:null }
 function cuSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
 function cuCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
 /* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
@@ -586,7 +645,9 @@ function xiPic(label){
   p.body.map(seg).join('')+p.flow.map(d=>`<path class="flow" d="${d}"/>`).join('')+`</svg>`;
 }
 function fillXiGrid(){
- const m=cuMat(), g=$('xiGrid'); g.innerHTML='';
+ /* ξ-список меди и PEX идентичен (Variant 0x529fcc…0x52a160), поэтому сетку строим один раз при
+   инициализации; на странице, где нет меди/PEX, берём медный список. */
+ const m=cuMat()||MATERIALS.find(x=>x.id==='copper'), g=$('xiGrid'); g.innerHTML='';
  m.xi.forEach((row,i)=>{
   const lab=document.createElement('label'); lab.className='xiItem';
   lab.innerHTML=`<input type="checkbox" id="xi${i}"> ${xiPic(row[0])} ${row[0]} <span class="hint">ξ=${fmt(row[1],1)}</span>`+
@@ -609,7 +670,7 @@ function xiTotal(){
 function xiShow(){ $('xiSum').textContent=fmt(xiTotal(),2) }   // Label11 «Sx=»
 /* «Сброс» (Command4 → FUN_0051c530): обнуляет 13 пар Text/Check (слоты 0x338…0x39c) */
 function xiResetAll(){
- const m=cuMat();
+ const m=cuMat()||MATERIALS.find(x=>x.id==='copper');
  m.xi.forEach((row,i)=>{ $('xi'+i).checked=false; $('xin'+i).value='1'; });   // количество — по умолчанию 1 шт.
  $('xiother').checked=false; $('xiotherval').value='';
  xiShow();
@@ -636,7 +697,7 @@ function cuSysSync(){
  $('cuCoolHint').textContent= coolActive ? '' : (tActive
   ? 'в оригинале блок неактивен: ν и ρ подставляются по температуре'
   : 'в оригинале блок неактивен: вода ν = 1,3·10⁻⁶ м²/с, ρ = 1000 кг/м³');
- $('tHint').style.display=(sys==='circ'||sys==='supply')?'':'none';
+ $('tHint').style.display=(sys==='circ'||sys==='supply'||sys==='hot')?'':'none';
  cuHeatSync();
 }
 
@@ -655,7 +716,7 @@ function cuHeatSync(){
   $('cunu').value=row?(row.nu*1e6).toFixed(2)+'e-6':'1.3e-6';
   $('curho').value=row?String(row.rho):'1000';
  }
- $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply')?'':'none';
+ $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply'||cuSysVal()==='hot')?'':'none';
 }
 
 /* Справка медной страницы (frmtablII9): оригинал открывает sp40_108_2004.doc
@@ -688,14 +749,56 @@ function helpCopper(){
    Скорость ограничена: ХВС — до 4 м/с, ГВС — до 3 м/с, отопление — до 2 м/с.</span>`;
 }
 
+/* Справка PEX-страницы (frmhelp10). Текст справки оригинала — из шаблона формы EXE
+   (Label1 @0x449b84, @0x449c40, @0x449cba; подписи «СП 40-102-2000» @0x449b12 и «СП 41-109-2005»
+   @0x449b4a); формул оригинал НЕ печатает. Ниже — формулы СП 41-109-2005 (п.3.4/3.5) и
+   СП 40-102-2000 (п.3.5), прочитанные по картинкам docs/sp41-109-2005/4293853500.files/x023…x028
+   и docs/sp-40-102-2000/4294849185.files/x127…x131 и сверенные с константами FUN_00526810. */
+function helpPex(){
+ return `<b>Справка — PEX трубы</b><hr>
+    Гидравлический расчет трубопроводов из сшитого полиэтилена (PEX) производится на основании
+    п.3.4 СП 41-109-2005 и п.3.5 СП 40-102-2000.<br><br>
+    Сортамент труб из "сшитого" полиэтилена (PEX) принят по табл.1 СП 41-109-2005.<br><br>
+    При расчете (PEX) труб произвольного диаметра установите флажок "другой" внутренний диаметр и
+    введите значение соответствующего расчетного внутреннего диаметра, мм.<br><hr>
+    Потери напора на участке (СП 41-109-2005 (1); СП 40-102-2000 (1)):<br>
+    <i>H</i> = <i>L</i>·<i>i</i> + ${fr('<i>V</i><sup>2</sup>·Σξ','2<i>g</i>')} , г = 9,8 м/с²<br><br>
+    Гидравлический уклон (СП 40-102-2000 (2)) и удельные потери давления (СП 41-109-2005 (3)):<br>
+    <i>i</i> = ${fr('<i>λ</i>·<i>V</i><sup>2</sup>','2<i>g</i>·<i>d</i><sub>p</sub>')} ,
+    <i>R</i> = ${fr('<i>λ</i>·<i>V</i><sup>2</sup>','2<i>d</i><sub>p</sub>')}·10<sup>3</sup> Па/м<br><br>
+    Коэффициент сопротивления трения (СП 41-109-2005 (4) = СП 40-102-2000 (3)):<br>
+    √<i>λ</i> = 0,5·( ${fr('<i>b</i>','2')} + ${fr('1,312(2−<i>b</i>)·lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>)','lg Re<sub>φ</sub> − 1')} ) / lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>)<br>
+    Re<sub>φ</sub> = ${fr('<i>d</i><sub>p</sub>·<i>V</i>','<span class="nu">ν</span><sub>t</sub>')} (6);
+    Re<sub>кз</sub> = ${fr('500<i>d</i><sub>p</sub>','К<sub>э</sub>')} (7);
+    <i>b</i> = 1 + ${fr('lg Re<sub>φ</sub>','lg Re<sub>кз</sub>')} (8), при <i>b</i> &gt; 2 принимается <i>b</i> = 2;<br>
+    К<sub>э</sub> = 1,0·10<sup>−6</sup> м (эквивалентная шероховатость PEX, п.3.5 СП 41-109-2005)<br><br>
+    Расчётный внутренний диаметр (СП 41-109-2005 (5)):
+    <i>d</i><sub>p</sub> = 0,5(2<i>d</i><sub>н</sub> + Δ<i>d</i><sub>н</sub> − 4<i>S</i> − 2Δ<i>S</i>),<br>
+    <span class="hint">в окне программы d<sub>в</sub> подставляется по сортаменту табл. 1 (S, ΔS, Δd
+    выбранной серии): d<sub>в</sub> = d<sub>н</sub> − 2(S+ΔS) + Δd/2 — при d<sub>н</sub>=16 и
+    «SDR 13,6 (S6,3)» это 12,75 мм, как в оригинале.</span><br><br>
+    Кинематическая вязкость воды (Таблица 2 СП 41-109-2005, пороги программы 50/60/70/80/90 °C):
+    <span class="nu">ν</span><sub>t</sub> = 10<sup>−6</sup>·{0,55; 0,47; 0,41; 0,36; 0,32} м²/с при
+    t = {50; 60; 70; 80; 90} °C; при t &lt; 50 °C программа держит <span class="nu">ν</span> = 1,3·10<sup>−6</sup> м²/с
+    и ρ = 1000 кг/м³. «другой» теплоноситель — <span class="nu">ν</span> и ρ вводятся вручную.<br><br>
+    ξ местных сопротивлений (значения в окне): отвод 90° — 0,5; тройник на проход — 0,5;
+    на ответвление — 1,5; на слияние — 1,5; на разделение потока — 3; крестовина на проход — 2;
+    на ответвление — 3; отступ — 0,5; скоба — 1; внезапное расширение — 0,5; внезапное сужение — 1;
+    калач — 0,7; «другие ξ» — сумма вручную.<br><br>
+    <span class="hint">Скорость ограничена: холодное водоснабжение — до 4 м/с, горячее
+    водоснабжение — до 3 м/с, отопление — до 2 м/с. Потери давления ΔP = <i>R</i>·<i>L</i> +
+    <i>Z</i>, <i>Z</i> = 0,5·ρ·<i>V</i><sup>2</sup>·Σξ.</span>`;
+}
+
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!(m.cls||m.pe))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
+$('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!(m.cls||m.pe||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
 document.querySelectorAll('input[name=pe]').forEach(r=>r.onchange=fillDiameters); // пластик: марка ПЭ → список dн и доступность SDR
 document.querySelectorAll('input[name=sdr]').forEach(r=>r.onchange=fillDiameters); // пластик: серия SDR → список dн и dв
+document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.onchange=fillDiameters); // PEX: серия SDR → список dн и dв
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();}; // как в программе: при «другой» dp-инпут редактируем, блок dу/классов/dн-S-dв блокируется
 document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм только у «неновых» (VarCmpLe(dв,300) And Option1)

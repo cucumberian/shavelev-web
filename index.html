@@ -13,7 +13,7 @@
  <!-- острие стрелки потока: маленький закрашенный треугольник -->
  <marker id="xiArrow" viewBox="0 0 6 6" refX="5.6" refY="3" markerWidth="5" markerHeight="5" markerUnits="userSpaceOnUse" orient="auto">
   <path d="M0,0 L6,3 L0,6 z" fill="#333"/></marker></defs></svg>
-<h1><span>Таблицы Шевелева</span> <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span> <span class="ver">v0.1.7</span></h1>
+<h1><span>Таблицы Шевелева</span> <span class="subtitle">(клон ver 3.0 — БрГТУ 2008; реверс-восстановление)</span> <span class="ver">v0.1.8</span></h1>
 
 <fieldset><legend>Материал труб</legend>
  <div class="row"><b>Комбинация труб:</b>
@@ -52,6 +52,12 @@
     <label><input type="radio" name="sdr" value="11"> SDR11 (S5)</label>
     <label><input type="radio" name="sdr" value="9"> SDR9 (S4)</label>
     <label><input type="radio" name="sdr" value="6"> SDR6 (S2,5)</label></div>
+  <div class="row full" id="pexSdrRow" style="display:none"><b>Серия труб:</b><!-- frmtablII10 Frame9 «Серия труб»: Option4 0x334, Option9 0x330, Option10 0x32c, Option11 0x328, Option12 0x324 -->
+    <label><input type="radio" name="pexsdr" value="sdr136" checked> SDR 13,6 (S6,3)</label>
+    <label><input type="radio" name="pexsdr" value="sdr11"> SDR 11 (S5)</label>
+    <label><input type="radio" name="pexsdr" value="sdr9"> SDR 9 (4)</label>
+    <label><input type="radio" name="pexsdr" value="sdr74"> SDR 7,4 (S3,2)</label>
+    <label><input type="radio" name="pexsdr" value="sdr6"> SDR 6 (2,5)</label></div>
  </div>
  <div id="srcRight">
  <div class="row full" id="vtRow" style="display:none"><b>Условный проход, мм:</b>

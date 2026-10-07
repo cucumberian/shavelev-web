@@ -167,12 +167,69 @@ function copperCalc(inp){
    hLegend:'Потери напора на участке, м',lines,outH,notes};
 }
 
+/* ─── PEX (frmtablII10, СП 41-109-2005): отдельная ветка движка ───
+    inp.cuSys: cold|hot|heat (Option1/Option2/Option3 Frame2 «Выбор системы»);
+    inp.xiSum — Σξ из Frame6; inp.cool — «вода»/«другой»; inp.cuNu/inp.cuRho — ν и ρ.
+    Модель программы (FUN_00526810): i = λV²/(2·9,81·d) (Variant 9,81 @0x528e10,
+    VarPow v² @0x528e2e, VarDiv @0x528e7b), λ — (4) СП 41-109 с Кэ = 10⁻⁶;
+    R = λV²/(2d)·10³ Па/м (картинка x024, печать «удельные потери давления R=» 0x447c40 @0x529050);
+    H = i·L + V²Σξ/19,62 (fld [0x4011d8]=19,62 @0x52a5b9, VarPow @0x52a639, VarAdd @0x52a66d);
+    ΔP = R·L + Z, Z = 0,5ρV²Σξ (9,80665 @0x529064/0x52a7bc).
+    ν(t) — табл. 2 СП 41-109 (цепочки 0x527a13…0x5281b7), по умолчанию 1,3·10⁻⁶ (@0x528842).
+    Лимиты скорости: 4 (Option1 @0x52a97b), 3 (Option2 @0x52acb7), 2 (Option3, текст 0x4483b0). */
+function pexCalc(inp){
+ const m=matOf('pex'); if(!m) return {ok:false,error:'материал не найден'};
+ const sys=['cold','hot','heat'].includes(inp.cuSys)?inp.cuSys:'cold';
+ const S=m.pexSys[sys];
+ const qraw=inp.q;
+ if(isNaN(qraw)) return {ok:false,error:'ошибка ввода — введите значение расхода'};
+ if(qraw<0) return {ok:false,error:'расход не должен быть отрицательным!'};
+ if(qraw===0) return {ok:false,error:'расход не должен равняться нулю! введите значение расхода'};
+ const dv=inp.dv_mm;
+ if(isNaN(dv)) return {ok:false,error:'ошибка ввода — Введите значение диаметра в мм'};
+ if(dv<=0) return {ok:false,error:'диаметр не может равняться нулю! Введите значение диаметра в мм'};
+ const L=inp.L;
+ if(isNaN(L)) return {ok:false,error:'введите значение длины участка в м'};
+ if(L<0) return {ok:false,error:'Длина участка не может быть отрицательным!'};
+ if(L===0) return {ok:false,error:'Длина участка не может равняться нулю! введите значение длины участка в м'};
+ let nu=inp.cuNu, rho=inp.cuRho;
+ if(sys==='cold'){ nu=NU_FIX; rho=RHO_FIX; }        // Option1: блоки «Температура»/«Теплоноситель» неактивны
+ else {
+  if(sys==='hot' && isNaN(inp.t)) return {ok:false,error:'Вы не ввели температуру! Для систем горячего водоснабжения рекомендуется t=60°С. Введите значение температуры, в °С'};
+  if(sys==='heat' && inp.cool==='other'){
+   if(isNaN(nu)) return {ok:false,error:'Вы не ввели значение коэффициента кинематической вязкости теплоностеля'};
+   if(isNaN(rho)||rho<=0) return {ok:false,error:'Вы не ввели значение плотности теплоностеля!'};
+  }
+ }
+ if(isNaN(nu)) nu=NU_FIX;
+ if(isNaN(rho)||rho<=0) rho=RHO_FIX;
+ const q=qToM3s(qraw,inp.qunit), d=dv/1000, v=velocity(q,dv);
+ const lam=pexLambda(nu,v,d);
+ const i=lam*v*v/(2*9.81*d);                        // Variant 9,81 @0x528e10
+ const R=pexR(nu,v,d);                              // λV²/(2d)·10³, Па/м
+ const xi=isNaN(inp.xiSum)?0:inp.xiSum;
+ const H=i*L + v*v*xi/CU.G2;
+ const Z=0.5*rho*v*v*xi;
+ const P=R*L+Z;
+ const lines=[`Скорость v = ${fmt(v,3)} м/с`,
+              `i = ${fmt(i,3)} м/м`,
+              `удельные потери давления R = ${fmt(R,1)} Па/м`];
+ const outH=[`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt(H,3)} м`,
+             `потери давления = ${fmt(P,0)} Па`];
+ const notes=[];
+ if(v>S.lim){ notes.push({cls:'warn',text:'Большая скорость! Рекомендуется увеличить диаметр'});
+              notes.push({cls:'warn',text:S.note}); }
+ return {ok:true,q,qunit:inp.qunit,v,i,i1000:i*1000,R,H,P,Z,xi,dv_mm:dv,L,rho,nu,sys,
+   hLegend:'Потери напора на участке, м',lines,outH,notes};
+}
+
 /* ─── главный вход движка: вход — числа, выход — объект; DOM не трогает ───
    inp = {mat, wear, dv_mm, q, qunit, L, k, mest, nu, rho, mode, selD, dpOf}
    dpOf(d) нужен только материалам с рядом рекомендации (сталь, э/с, чугун, пластик). */
 function shevCalc(inp){
  const mat=inp.mat, sys=usesSys(mat), kused=usesK(mat);
  if(mat==='copper') return copperCalc(inp);   // свои формулы (2)/(3)/(5)–(9), ν/ρ по t, ξ-редактор
+ if(mat==='pex') return pexCalc(inp);          // λ-семейство СП 41-109 (Кэ=10⁻⁶), ν/ρ по t, ξ-редактор
  const qraw=inp.q;
  if(isNaN(qraw)) return {ok:false,error:'ошибка ввода — введите значение расхода'};
  if(qraw<0) return {ok:false,error:'расход не должен быть отрицательным!'};
@@ -219,6 +276,6 @@ function shevCalc(inp){
 
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
- module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,copperCalc,
+ module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,copperCalc,pexCalc,
    NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesK,ciLimits,speedNotes,recommendation,shevCalc};
 }

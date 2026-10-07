@@ -70,6 +70,21 @@ function cuLambda(nu,v,d){
 /* (5) R = λV²/(2d)·10³ [Па/м] — системы отопления */
 function cuR5(nu,v,d){ return cuLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
 
+/* ─── PEX (сшитый полиэтилен), СП 41-109-2005 п.3.5 + СП 40-102-2000 п.3.5 ───
+   Страница frmtablII10, calc FUN_00526810. Та же схема (3)–(8), что у меди, но
+   Кэ = 1,0·10⁻⁶ м (Variant 1e-06 @0x52874a; у меди 10⁻⁵) и b ограничено сверху 2
+   (сравнение b>2 @0x528b32, int 2 @0x528b1e/0x528cb3). 3,7 @0x528b94; 1,312 @0x528cce;
+   0,5 @0x528d5c; 500 @0x52877f. Формулы прочитаны зрением по картинкам
+   docs/sp41-109-2005/4293853500.files/x024…x028 и docs/sp-40-102-2000/4294849185.files/x127…x131. */
+const PEX_KE = 1e-6;
+function pexLambda(nu,v,d){
+ const lg=Math.log10, re=v*d/nu, rek=CU.RE500*d/PEX_KE, l37=lg(CU.K37*d/PEX_KE);
+ let b=1+lg(re)/lg(rek); if(b>2) b=2;
+ const sq=CU.HALF*(b/2 + CU.K1312*(2-b)*l37/(lg(re)-1))/l37;
+ return sq*sq;
+}
+function pexR(nu,v,d){ return pexLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
+
 /* Выбор формулы по материалу/состоянию.
    wear: 'new'|'old'; mat — id материала; v м/с; d — внутренний диаметр, м.
    Возврат {A, e} → i = A·v²/d^e */
@@ -92,5 +107,5 @@ function iCalc(wear, mat, v, d){
 
 // экспорт для node-тестов (в браузере window есть, в node — global)
 if (typeof module!=='undefined' && module.exports){
-  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5};
+  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5,PEX_KE,pexLambda,pexR};
 }
