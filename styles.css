@@ -170,3 +170,5 @@ fieldset.off input[type=radio],fieldset.off input[type=checkbox],
  .calcGrid{grid-template-columns:1fr}
  .calcBtn{margin-top:2px}
 }
+/* вторая синяя ссылка (PEX-AL-PEX: «СП 41-102-98» + «СП40-102-2000») */
+#gostLink2{margin-left:.7em}

@@ -240,7 +240,8 @@ function pexCalc(inp){
 function shevCalc(inp){
  const mat=inp.mat, sys=usesSys(mat), kused=usesK(mat);
  if(mat==='copper') return copperCalc(inp);   // свои формулы (2)/(3)/(5)–(9), ν/ρ по t, ξ-редактор
- if(mat==='pex') return pexCalc(inp);          // λ-семейство СП 41-109 (Кэ=10⁻⁶), ν/ρ по t, ξ-редактор
+ if(mat==='pex') return pexCalc(inp);
+ if(mat==='metal-pex') return pexCalc(inp); // PEX-AL-PEX: та же формула λ и те же системы          // λ-семейство СП 41-109 (Кэ=10⁻⁶), ν/ρ по t, ξ-редактор
  const qraw=inp.q;
  if(isNaN(qraw)) return {ok:false,error:'ошибка ввода — введите значение расхода'};
  if(qraw<0) return {ok:false,error:'расход не должен быть отрицательным!'};

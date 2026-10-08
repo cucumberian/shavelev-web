@@ -72,7 +72,7 @@ function applySysVisibility(){
    «шт.», Check14 «другие» + Text17, Label11 «Sx=», Command4 «Сброс»). */
 function applyCopperVisibility(id){
  const m=MATERIALS.find(x=>x.id===id);
- const cu = id==='copper' || id==='pex';
+ const cu = id==='copper' || id==='pex' || id==='metal-pex';
  ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=cu?'':'none');
  // на этих страницах нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
  if(cu){ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none'); }
@@ -253,7 +253,9 @@ function fillDiameters(){
    $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
    $('pexSpRow').style.display=''; // галка «считать по формуле (4) СП»
- } else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
+ }
+ else if(m.id==='metal-pex'){ $('dLabel').textContent='Наружный диаметр dн, мм:'; $('dvLabel').innerHTML='Внутренний диаметр dв, мм:'; $('dpOther').style.display=''; }
+ else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
    $('dLabel').textContent='Условный проход dу, мм:';
    $('tLabel').textContent='Толщина стенки, мм:';
    $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
@@ -408,6 +410,7 @@ function calc(){
    if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
      return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
+   if(m.dvMap){const x=m.dvMap[d];return x===undefined?NaN:x;}
    return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
  };
  const r=shevCalc({
@@ -634,7 +637,7 @@ function helpPlastic(){
 /* Страница меди ИЛИ PEX: обе пользуются блоками Frame4 «Температура» / Frame5 «Теплоноситель».
    Таблица ν/ρ берётся КОНКРЕТНОЙ страницы: у меди t=90 → 0,36·10⁻⁶ (DAT_00402428 @0x5166da-цепочка),
    у PEX t=90 → 0,32·10⁻⁶ (DAT_00402670 @0x527da9/@0x5281b7) — таблицы различаются на этом шаге. */
-function cuMat(){ const m=currentMat(); return m&&(m.id==='copper'||m.id==='pex')?m:null }
+function cuMat(){ const m=currentMat(); return m&&(m.id==='copper'||m.id==='pex'||m.id==='metal-pex')?m:null } // у PEX-AL-PEX свои «Температура» и «Теплоноситель»
 function cuSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
 function cuCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
 /* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
@@ -721,6 +724,16 @@ function cuHeatSync(){
  $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply'||cuSysVal()==='hot')?'':'none';
 }
 
+/* Синие ссылки на документы страницы: у PEX-AL-PEX их две («СП 41-102-98» и «СП40-102-2000»),
+   у остальных — одна. */
+function setDocLinks(m){
+ const ids=m.docs&&m.docs.length?m.docs:[m.doc];
+ $('gostLink').textContent=DOCS[ids[0]]||'';
+ const two=ids.length>1&&DOCS[ids[1]];
+ $('gostLink2').textContent=two?DOCS[ids[1]]:'';
+ $('gostLink2').style.display=two?'':'none';
+}
+
 /* Справка медной страницы (frmtablII9): оригинал открывает sp40_108_2004.doc
    (FUN_0051c440 @0x51c440). Здесь — формулы СП 40-108-2004 (docs/sp40-108-2004/sp40-108-2004.md:
    формулы (2), (3), (4)–(10), Таблица 5, Приложение А) — те же константы, что в FUN_00515500. */
@@ -800,7 +813,7 @@ function helpPex(){
 
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();$('gostLink').textContent=DOCS[m.doc]||'';if(!(m.cls||m.pe||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
+$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!(m.cls||m.pe||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
@@ -831,5 +844,5 @@ $('xiReset').onclick=xiResetAll;
 xiShow();
 $('btnCalc').onclick=calc;
 $('btnHelp').onclick=showHelp;
-$('gostLink').textContent=DOCS[MATERIALS[0].doc];
+setDocLinks(MATERIALS[0]);
 fillDiameters();
