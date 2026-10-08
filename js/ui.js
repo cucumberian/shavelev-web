@@ -1,4 +1,4 @@
-/* ui.js — логика интерфейса клона: заполнение списков, чтение контролов, вывод, справка.
+/* ui.js — логика интерфейса расчёта: заполнение списков, чтение контролов, вывод, справка.
    Зависимости (загружаются раньше в index.html): formulas.js, js/data/* (registry, docs, modes,
    модули типов труб), calc.js.
    ВСЕ вычисления — в calc.js (shevCalc, velocity, gradient, speedNotes, recommendation, fmt);
@@ -220,6 +220,7 @@ function fillDiameters(){
    if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
    $('thicknessRow').style.display='none';
   } else {
+   if(m.id==='metal-pex') $('pexSpRow').style.display=''; // у PEX-AL-PEX тоже доступен вариант СП
    m.d.forEach((d,i)=>{
      const o=document.createElement('option');
      // wall-материалы (электросварка): d — наружный, dв=d−2s считается по выбранной стенке
@@ -438,14 +439,91 @@ function calc(){
 /* Дробь для «печатного» вида формул (офлайн: чистый CSS, без KaTeX/MathJax). */
 const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="fden">${d}</span></span>`;
 
+/* Текст справки текущего материала + раздел «Расчёты». Вынесено отдельно, чтобы справка
+   перерисовывалась при смене класса труб (иначе остаётся открытой от прежнего материала). */
+function helpHtml(){
+ const m=currentMat();
+ const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
+  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex,'metal-pex':helpMetalPex};
+ const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
+ // у PEX формулы ещё не разбиты построчно — показываем шаги расчёта после справки
+ const inline=m?['re','rek','b','lam','i','R','H','P'].map(calcStepHtml).join(''):'';
+ const extra=(m&&m.id==='pex')?inline:'';
+ return (hf?hf():'')+calcSection()+extra;
+}
 function showHelp(){
  const h=$('help');
  if(h.style.display==='block'){h.style.display='none';return;}
- const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
-  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex};
- const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
- h.innerHTML=hf?hf():'';
+ h.innerHTML=helpHtml();
  h.style.display='block';
+}
+/* Справка страницы PEX-AL-PEX (металлополимерные трубы): те же зависимости, что у PEX, но
+   свои ссылки (СП 41-102-98 / СП 40-102-2000) и своя подстановка dв = dн − 2S. */
+/* Справка страницы PEX-AL-PEX: формулы — данными, в порядке вычисления. Порядок блока:
+   заголовок (считаемый параметр) → строка «документ + номер» с формулой = подстановка = значение →
+   метаданные (пометки) → список параметров с источниками коэффициентов. */
+function helpMetalPex(){
+ const F=[
+  {h:'d<sub>p</sub> — расчётный (приведённый внутренний) диаметр, м', s:'СП 41-102-98 (4)',
+   t:'d_p=0,5\\left(2d_н+\\Delta d_н-4S-2\\Delta S\\right)', step:'dp', note:'подстановка вместо dв',
+   p:['d<sub>н</sub> — наружный диаметр, м','Δd<sub>н</sub> — предельное отклонение наружного диаметра, м',
+      'S — номинальная толщина стенки, м','ΔS — предельное отклонение толщины стенки, м']},
+  {h:'Re<sub>ф</sub> — фактическое число Рейнольдса', s:'СП 41-102-98 (5)',
+   t:'Re_ф=\\frac{d_p\\cdot V}{\\nu_t}', step:'re',
+   p:['d<sub>p</sub> — расчётный диаметр, м','V — средняя скорость, м/с',
+      'ν<sub>t</sub> — коэффициент кинематической вязкости воды при температуре t, м²/с (табл. 2 СП 41-109-2005)']},
+  {h:'Re<sub>кв</sub> — число Рейнольдса, соответствующее началу квадратичной области сопротивления', s:'СП 41-102-98 (6)',
+   t:'Re_{кв}=\\frac{500\\,d_p}{К_э}', step:'rek',
+   p:['d<sub>p</sub> — расчётный диаметр, м','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3 СП 41-109-2005)']},
+  {h:'b — число подобия режимов течения воды', s:'СП 41-102-98 (7)',
+   t:'b=1+\\frac{\\lg Re_ф}{\\lg Re_{кв}}', step:'b',
+   p:['Re<sub>ф</sub> — фактическое число Рейнольдса','Re<sub>кв</sub> — число Рейнольдса начала квадратичной области',
+      'при b &gt; 2 принимается b = 2']},
+  {h:'i — гидравлический уклон, м/м', s:'СП 41-109-2005 (2) / СП 40-102-2000 (2)',
+   t:'i=\\frac{\\lambda\\cdot V^2}{2g\\cdot d_p}', step:'i',
+   p:['λ — коэффициент гидравлического сопротивления по длине','V — средняя скорость, м/с',
+      'g — ускорение свободного падения, м/с² (9,81 м/с²; 2g = 19,62 — константа программы)','d<sub>p</sub> — расчётный (внутренний) диаметр, м']},
+  {h:'R — удельные потери давления на трение, Па/м', s:'СП 41-102-98 (2)',
+   t:'R=\\frac{\\lambda\\cdot V^2}{2d_p}\\cdot 10^3', step:'R',
+   p:['λ — коэффициент гидравлического сопротивления по длине','V — средняя скорость движения воды, м/с','d<sub>p</sub> — расчётный (внутренний) диаметр, м']},
+  {h:'R<sub>t</sub> — удельные потери давления с учётом температуры, Па/м', s:'СП 41-102-98 (8)',
+   t:'R_t=R\\cdot\\alpha', step:null, note:'по этой формуле расчёт не ведётся: коэффициент α (табл. 2 СП 41-102-98) программа не применяет', p:['R — удельные потери давления, Па/м','α — коэффициент, учитывающий температуру воды (табл. 2 СП 41-102-98)']},
+  {h:'Z — потери давления в местных сопротивлениях, Па', s:'СП 41-102-98 (9)',
+   t:'Z=\\Sigma\\xi\\cdot\\frac{V^2}{2}\\cdot\\rho', step:'Z',
+   p:['Σξ — сумма коэффициентов местных сопротивлений (табл. 3 СП 41-102-98)','V — средняя скорость, м/с','ρ — плотность воды, кг/м³']},
+  {h:'H — потери напора на участке, м', s:'СП 41-109-2005 (1)',
+   t:'H=L\\cdot i+\\frac{V^2\\cdot\\Sigma\\xi}{2g}', step:'H',
+   p:['L — длина участка, м','i — гидравлический уклон, м/м','V — средняя скорость, м/с','Σξ — сумма коэффициентов местных сопротивлений','g — ускорение свободного падения, м/с² (9,81 м/с²; 2g = 19,62)']},
+  {h:'ΔP — потери давления на участке, Па', s:'СП 41-102-98 (1)',
+   t:'\\Delta P=R\\cdot l+Z', step:'P',
+   p:['R — удельные потери давления на трение, Па/м','l — длина участка, м','Z — потери давления в местных сопротивлениях, Па']}
+ ];
+ const sp=$('pexSp') && $('pexSp').checked;
+ const LAM_PARAMS=['b — число подобия режимов течения воды','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3)','Re<sub>ф</sub> — фактическое число Рейнольдса','d<sub>p</sub> — расчётный (внутренний) диаметр, м'];
+ const lamSP={h:'λ — коэффициент гидравлического сопротивления по длине', s:'СП 41-109-2005 (4) / СП 40-102-2000 (3) / СП 41-102-98 (3)',
+  t:'\\sqrt{\\lambda}=0,5\\left(\\frac{b}{2}+\\frac{1,312(2-b)\\cdot\\lg(3,7\\,d_p/К_э)}{\\lg Re_ф-1}\\right)\\Big/\\lg(3,7\\,d_p/К_э)', step:sp?'lamSp':null,
+  note:sp?'расчёт ведётся по этой формуле (галка «по формуле (4) СП» включена)':'по этой формуле расчёт не ведётся — включите галку «считать по формуле (4) СП 41-109»', p:LAM_PARAMS};
+ const lamPR={h:'λ — коэффициент гидравлического сопротивления по длине (формула программы)', s:'программа «Таблицы Шевелева»',
+  t:'\\sqrt{\\lambda}=0,5\\left(\\frac{b}{2}+1,312(2-b)\\right)\\Big/\\left(\\lg Re_ф-1\\right)', step:sp?null:'lamProg',
+  note:sp?'по этой формуле расчёт не ведётся':'расчёт ведётся по этой формуле (как в оригинале; множитель lg(3,7d_p/К_э) в коде сокращается)', p:LAM_PARAMS};
+ F.splice(4,0,lamSP,lamPR);
+ let h='<b>металлополимерные трубы (PEX-AL-PEX)</b><hr>'
+  +'Гидравлический расчет металлополимерных трубопроводов (PEX-AL-PEX) производится на основании п.3.4 '
+  +'<a href="gost/sp41_102_98.doc" target="_blank" class="fdoc">СП 41-102-98</a> и п.3.5 '
+  +'<a href="gost/sp40_102_2000.doc" target="_blank" class="fdoc">СП 40-102-2000</a>.<br><br>'
+  +'При расчете металлополимерных труб произвольного диаметра установите флажок «другой» внутренний диаметр и введите значение соответствующего расчетного внутреннего диаметра, мм.<br><hr>'
+  +'Сортамент принят по программе: наружный dн 16…90 мм, внутренний диаметр подставляет программа: <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub> − 2<i>S</i> (16→12, 20→16, 26→20, 32→26, 40→33, 50→42 мм; для 60…90 мм <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub>). Для произвольного диаметра установите флажок «другой dв» и введите значение вручную.<br><hr>';
+ for(const f of F){
+  h+='<div class="fHead">'+f.h+'</div>'
+   +'<span class="fLine"><span class="fSrc">'+f.s+'</span> '+tex(f.t)+(f.step?calcStepHtml(f.step):'')+'</span>'
+   +'<span class="fLegend">'+(f.note?'<span class="fParam">'+f.note+'</span>':'')+f.p.map(x=>'<span class="fParam">'+x+'</span>').join('')+'</span>';
+ }
+ h+='<hr><b>Внимание:</b> программа «Таблицы Шевелева» считает λ иначе — в её коде множитель lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) умножается на ВСЮ скобку (вместе с <i>b</i>/2) и затем сокращается, поэтому программа применяет √<i>λ</i> = 0,5·(<i>b</i>/2 + 1,312(2−<i>b</i>))/(lg Re<sub>ф</sub> − 1). Расчёт по умолчанию повторяет программу (совпадение с оригиналом 1-в-1), вариант СП включается галочкой «считать по формуле (4) СП 41-109» на странице PEX.<br>'
+  +'На живой точке <i>d</i><sub>в</sub> = 12 мм, Q = 1 л/с: программа i = 8,122 м/м, формула СП — 6,411 м/м (−21 %).<br><br>'
+  +'Вязкость и плотность по температуре: 50/60/70/80/90 °C → ν = 0,55/0,47/0,41/0,36/0,32·10<sup>−6</sup> м²/с, ρ = 990/980/980/970/970 кг/м³; при t &lt; 50 °C ν = 1,3·10<sup>−6</sup> (как в ХВС).<br>'
+  +'Пределы скорости: ХВС 4 м/с, ГВС 3 м/с, отопление 2 м/с.<br><br>'
+  +'Местные сопротивления — список ξ (12 позиций + «другие», счётчики «шт.»); последняя позиция — «соединение с обжимной гайкой».';
+ return h;
 }
 /* Справка стальной страницы — как в оригинальной программе (frmtablII1 help, 0x50395) */
 function helpSteel(){
@@ -594,7 +672,7 @@ function helpGrp(){
 /* Справка стеклянной страницы (окно «трубы стеклянные ГОСТ 8894-86», скрин оригинала 07.10.2026) —
    тексты дословно из EXE (frmhelp8): зачин 0x4ac94, абзац о коррозии 0x4abd9, абзац о диаметрах 0x4ab11.
    В EXE в последнем абзаце опечатка «стеклянных труб труб не относящихся» (воспроизведена и на скрине
-   оригинала) — в клоне напечатано «стеклянных труб не относящихся». */
+   оригинала) — в расчёте напечатано «стеклянных труб не относящихся». */
 function helpGlass(){
  return `<b>трубы стеклянные ГОСТ 8894-86</b><hr>
   Для гидравлического расчета стеклянных труб используют формулу:<br>
@@ -655,7 +733,7 @@ function fillXiGrid(){
  const m=cuMat()||MATERIALS.find(x=>x.id==='copper'), g=$('xiGrid'); g.innerHTML='';
  m.xi.forEach((row,i)=>{
   const lab=document.createElement('label'); lab.className='xiItem';
-  lab.innerHTML=`<input type="checkbox" id="xi${i}"> ${xiPic(row[0])} ${row[0]} <span class="hint">ξ=${fmt(row[1],1)}</span>`+
+  lab.innerHTML=`<input type="checkbox" id="xi${i}"> ${xiPic(row[0])} <span class="xiName">${row[0]}</span> <span class="hint">ξ=${fmt(row[1],1)}</span>`+
                 `<input type="number" id="xin${i}" class="w-xi" min="0" step="1" value="1"> <span class="unit">шт.</span>`;
   g.appendChild(lab);
  });
@@ -724,6 +802,49 @@ function cuHeatSync(){
  $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply'||cuSysVal()==='hot')?'':'none';
 }
 
+/* ── Раздел «Расчёты» справки: формула (LaTeX) → подстановка значений → результат ──
+   Инженер видит, по какой формуле и из какого документа/таблицы взята каждая величина.
+   Пилот: страницы PEX и PEX-AL-PEX (λ-семейство). Остальные материалы — в работе. */
+function calcSection(){ return ''; }
+
+/* Шаг расчёта для конкретной формулы: подстановка значений → результат.
+   Вызывается из справки сразу под формулой (${calcStepHtml('re')} и т. п.). */
+/* Шаг расчёта для конкретной формулы справки: подстановка введённых значений → результат. */
+/* Шаг расчёта: в саму формулу подставляются числа — формула = числа = результат с единицами. */
+function calcStepHtml(kind){
+ const m=currentMat(); if(!m || (m.id!=='pex' && m.id!=='metal-pex')) return '';
+ // диаметр — как у движка: подставленный программой dв (поле dcv), а не наружный из списка
+ const q=numStrict($('q').value), dv=numStrict($('dcv').value), L=numStrict($('len').value);
+ if(isNaN(q)||isNaN(dv)||dv<=0||isNaN(L)) return '';
+ const sys=cuSysVal(), pexSp=$('pexSp') && $('pexSp').checked;
+ let nu=1.3, rho=1000;
+ if(sys!=='cold' && $('cunu') && $('cunu').value!=='') nu=numStrict($('cunu').value);
+ if($('curho') && $('curho').value!=='') rho=numStrict($('curho').value);
+ if(!(nu>0)) nu=1.3; if(!(rho>0)) rho=1000;
+ const nu6=nu*1e-6, xi=xiTotal()||0;
+ const d=dv/1000, v=velocity(qToM3s(q,$('qunit').value),dv);
+ const lg=Math.log10, re=v*d/nu6, rek=500*d/PEX_KE, l37=lg(3.7*d/PEX_KE);
+ let b=1+lg(re)/lg(rek); const cap=b>2; if(cap) b=2;
+ const lam=pexSp?pexLambdaSP(nu6,v,d):pexLambda(nu6,v,d);
+ const i=lam*v*v/(2*9.81*d), R=lam*v*v/(2*d)*1000, H=i*L+v*v*xi/19.62, P=R*L+0.5*rho*v*v*xi;
+ const f=(x,n)=>x.toFixed(n).replace('.',',');
+ const dn=numStrict($('dsel').value), Sst=(dn-dv)/2; // толщина стенки по сортаменту программы
+ const line=(texsrc,res,note)=>' = '+tex(texsrc)+' = <b>'+res+'</b>'; // источники коэффициентов — в списке параметров
+ const S={};
+ S.dp=line('d_н-2S='+f(dn,2)+'-2\\cdot '+f(Sst,2),f(dv,2)+' мм','S = '+f(Sst,2)+' мм — толщина стенки по сортаменту страницы; подстановка вместо dв');
+ S.re=line('\\frac{'+f(dv,2)+'/1000\\cdot '+f(v,3)+'}{'+f(nu6*1e6,2)+'\\cdot 10^{-6}}',f(re,0),'ν — табл. 2 СП 41-109-2005'+(sys==='cold'?' (ХВС: ν=1,3·10⁻⁶ м²/с, t=10 °C)':''));
+ S.rek=line('\\frac{500\\cdot '+f(d,5)+'}{1,0\\cdot 10^{-6}}',f(rek,0),'К_э = 1,0·10⁻⁶ м — п. 3.5.3');
+ S.b=line('1+\\frac{\\lg '+f(re,0)+'}{\\lg '+f(rek,0)+'}',f(b,4));
+ const lamSp=pexLambdaSP(nu6,v,d), lamPr=pexLambda(nu6,v,d);
+ S.lamSp=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+\\frac{1,312(2-'+f(b,4)+')\\cdot '+f(l37,4)+'}{\\lg '+f(re,0)+'-1}\\right)\\Big/'+f(l37,4),f(lamSp,6)+' — вариант СП')
+ S.lamProg=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+1,312(2-'+f(b,4)+')\\right)\\Big/\\left(\\lg '+f(re,0)+'-1\\right)',f(lamPr,6)+' — формула программы')
+ S.i=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,81\\cdot '+f(d,5)+'}',f(i,3)+' м/м','g = 9,81 м/с²');
+ S.R=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot '+f(d,5)+'}\\cdot 10^3',f(R,3)+' Па/м');
+ S.Z=line('\\Sigma\\xi\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0)+'='+f(xi,2)+'\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0),f(0.5*rho*v*v*xi,3)+' Па')
+ S.H=line(''+f(L,0)+'\\cdot '+f(i,3)+'+\\frac{'+f(v,3)+'^2\\cdot '+f(xi,2)+'}{2\\cdot 9,81}',f(H,3)+' м',xi?'Σξ = '+f(xi,2)+' (список местных сопротивлений страницы)':'Σξ = 0 (ничего не отмечено)');
+ S.P=line(''+f(R,3)+'\\cdot '+f(L,0)+'+0,5\\cdot '+f(rho,0)+'\\cdot '+f(v,3)+'^2\\cdot '+f(xi,2),f(P,3)+' Па',sys==='cold'?'ρ = 1000 кг/м³ (ХВС)':'ρ — по температуре/вводу');
+ return S[kind]||'';
+}
 /* Синие ссылки на документы страницы: у PEX-AL-PEX их две («СП 41-102-98» и «СП40-102-2000»),
    у остальных — одна. */
 function setDocLinks(m){
@@ -777,7 +898,7 @@ function helpPex(){
     При расчете (PEX) труб произвольного диаметра установите флажок "другой" внутренний диаметр и
     введите значение соответствующего расчетного внутреннего диаметра, мм.<br><hr>
     Потери напора на участке (СП 41-109-2005 (1); СП 40-102-2000 (1)):<br>
-    <i>H</i> = <i>L</i>·<i>i</i> + ${fr('<i>V</i><sup>2</sup>·Σξ','2<i>g</i>')} , г = 9,8 м/с²<br><br>
+    <i>H</i> = <i>L</i>·<i>i</i> + ${fr('<i>V</i><sup>2</sup>·Σξ','2<i>g</i>')} , g = 9,8 м/с²<br><br>
     Гидравлический уклон (СП 40-102-2000 (2)) и удельные потери давления (СП 41-109-2005 (3)):<br>
     <i>i</i> = ${fr('<i>λ</i>·<i>V</i><sup>2</sup>','2<i>g</i>·<i>d</i><sub>p</sub>')} ,
     <i>R</i> = ${fr('<i>λ</i>·<i>V</i><sup>2</sup>','2<i>d</i><sub>p</sub>')}·10<sup>3</sup> Па/м<br><br>
@@ -791,7 +912,7 @@ function helpPex(){
     lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) в коде умножается на всю скобку и тут же делится на него, т.е.
     сокращается и в член 1,312(2−<i>b</i>) не входит: √<i>λ</i> = 0,5·(<i>b</i>/2 + 1,312(2−<i>b</i>))/(lg Re<sub>φ</sub> − 1).
     Из-за этого при Re &gt; ~4·10<sup>5</sup> программа даёт потери МЕНЬШЕ, а при малых Re — БОЛЬШЕ, чем по СП
-    (до ±50 %). Клон по умолчанию повторяет программу; флажок «считать по формуле (4) СП 41-109» считает
+    (до ±50 %). Программа считает по этой форме; флажок «считать по формуле (4) СП 41-109» считает
     строго по СП. Проверено по 34 живым точкам оригинала (совпадение в пределах точности печати).<br><br>
     Расчётный внутренний диаметр (СП 41-109-2005 (5)):
     <i>d</i><sub>p</sub> = 0,5(2<i>d</i><sub>н</sub> + Δ<i>d</i><sub>н</sub> − 4<i>S</i> − 2Δ<i>S</i>),<br>
@@ -813,7 +934,7 @@ function helpPex(){
 
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!(m.cls||m.pe||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters();};
+$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!(m.cls||m.pe||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
@@ -844,5 +965,20 @@ $('xiReset').onclick=xiResetAll;
 xiShow();
 $('btnCalc').onclick=calc;
 $('btnHelp').onclick=showHelp;
+/* Справка обновляется «на лету»: после «Рассчитать», смены системы, температуры, диаметра,
+   расхода и длины — иначе в открытой справке останутся прежние подстановки и результаты. */
+/* Пересчёт панели по текущим данным (если расчёт уже делали) + перерисовка открытой справки.
+   doCalc — исходный обработчик кнопки «Рассчитать»; вызываем его напрямую, чтобы не зациклиться. */
+const doCalc=$('btnCalc').onclick;
+function refreshHelp(){
+ const out=$('out');
+ const hasRes=out && out.textContent.trim()!=='' && out.textContent.trim()!=='—';
+ if(hasRes && doCalc) doCalc();
+ const hp=$('help'); if(hp && hp.style.display==='block') hp.innerHTML=helpHtml();
+}
+$('btnCalc').addEventListener('click',refreshHelp);
+$('cuSysField').addEventListener('change',refreshHelp);
+['tcombo','dsel','q','len','dcv','pexSp'].forEach(id=>{ const el=$(id); if(el) el.addEventListener('change',refreshHelp); });
+document.addEventListener('change',e=>{ if(e.target && (e.target.name==='cusys'||e.target.name==='cool'||e.target.id==='xiother')) refreshHelp(); });
 setDocLinks(MATERIALS[0]);
 fillDiameters();
