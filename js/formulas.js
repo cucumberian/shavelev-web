@@ -78,12 +78,25 @@ function cuR5(nu,v,d){ return cuLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
    docs/sp41-109-2005/4293853500.files/x024…x028 и docs/sp-40-102-2000/4294849185.files/x127…x131. */
 const PEX_KE = 1e-6;
 function pexLambda(nu,v,d){
+ const lg=Math.log10, re=v*d/nu, rek=CU.RE500*d/PEX_KE;
+ let b=1+lg(re)/lg(rek); if(b>2) b=2;
+ // FUN_00526810: множитель L=lg(3,7d/Кэ) умножается на ВСЮ скобку (Mul @0x528d7a) и тут же
+ // сокращается делением на L (Div @0x528db2) — внутрь члена 1,312(2−b) он НЕ входит.
+ // Отсюда √λ = 0,5·[b/2 + 1,312(2−b)]/(lg Re − 1), а НЕ формула (4) СП с L внутри скобки:
+ // показатель λ по Re у оригинала ≈ −0,3 против −0,13 у СП. Найдено реверсом 08.10.2026
+ // (materials/pex_re/fun526810.md), проверено по 34 живым точкам (≤0,7 % = точность печати).
+ const sq=CU.HALF*(b/2 + CU.K1312*(2-b))/(lg(re)-1);
+ return sq*sq;
+}
+function pexR(nu,v,d){ return pexLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
+/* Та же λ, но по формуле (4) СП 41-109-2005 / (3) СП 40-102-2000 (L внутри скобки) —
+   для галки «считать по СП»: √λ = 0,5·[b/2 + 1,312(2−b)·L/(lgRe−1)]/L. */
+function pexLambdaSP(nu,v,d){
  const lg=Math.log10, re=v*d/nu, rek=CU.RE500*d/PEX_KE, l37=lg(CU.K37*d/PEX_KE);
  let b=1+lg(re)/lg(rek); if(b>2) b=2;
  const sq=CU.HALF*(b/2 + CU.K1312*(2-b)*l37/(lg(re)-1))/l37;
  return sq*sq;
 }
-function pexR(nu,v,d){ return pexLambda(nu,v,d)*v*v/(2*d)*CU.K1000 }
 
 /* Выбор формулы по материалу/состоянию.
    wear: 'new'|'old'; mat — id материала; v м/с; d — внутренний диаметр, м.
@@ -107,5 +120,5 @@ function iCalc(wear, mat, v, d){
 
 // экспорт для node-тестов (в браузере window есть, в node — global)
 if (typeof module!=='undefined' && module.exports){
-  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5,PEX_KE,pexLambda,pexR};
+  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5,PEX_KE,pexLambda,pexR,pexLambdaSP};
 }

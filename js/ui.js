@@ -133,7 +133,7 @@ function fillDiameters(){
  $('clsRow').style.display=m.cls?'':'none';
  $('vtRow').style.display='none'; $('tipRow').style.display='none'; // селекторы а/ц — только на своей странице
  $('peRow').style.display='none'; $('sdrRow').style.display='none'; // блоки пластика — только на своей странице
- $('pexSdrRow').style.display='none'; // рамка «Серия труб» PEX — только на своей странице
+ $('pexSdrRow').style.display='none'; $('pexSpRow').style.display='none'; // рамка «Серия труб» PEX — только на своей странице
  $('dpOtherCap').textContent=m.pe?'не по ГОСТу':'другой'; // Check1 frmtablII5 озаглавлен иначе, чем «другой» прочих страниц
  if(m.gas){
    // frmtablII1: dн → связанная стенка S → dp = dн − 2s − 1
@@ -252,6 +252,7 @@ function fillDiameters(){
    $('dLabel').textContent='Наружный диаметр dн, мм:';
    $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
    $('dpOther').style.display='';
+   $('pexSpRow').style.display=''; // галка «считать по формуле (4) СП»
  } else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
    $('dLabel').textContent='Условный проход dу, мм:';
    $('tLabel').textContent='Толщина стенки, мм:';
@@ -341,13 +342,13 @@ function curDv(){
  if(m.series){ // frmtablII10 PEX: Combo1_Click FUN_00522aa0 → Text2 (слот 0x304). На каждый
    // диаметр в EXE лежат (S, ΔS, Δd) из табл. 1 СП 41-109 (dн=16 и SDR 13,6 → 1,3; 0,4; 0,3),
    // арифметика 0x5263e9…0x5264ca (int 2 @0x5263f4, int 4 @0x526457, 0,5 @0x526437) →
-   // dв = 0,5(2dн + Δd − 4(S+ΔS)) = dн − 2(S+ΔS) + Δd/2 = 16 − 3,4 + 0,15 = 12,75 — ровно как в
-   // оригинале (скрин 07.10.2026: dн=16, «SDR 13,6 (S6,3)» → dв=12,75 и v=23,497 ✓).
-   // Формула (5) СП 41-109 «dр = 0,5(2dн + Δdн − 4S − 2ΔS)» дала бы 13,15; вариант dн − 2,5S тоже
-   // даёт 12,75, но не использует ΔS и Δd. Уточняется по живым показаниям других серий.
+   // dв = 0,5(2dн + Δd − 4S − 2ΔS) = dн − 2S − ΔS + Δd/2 = 16 − 2,6 − 0,4 + 0,15 = 13,15 — ровно
+   // как в оригинале (живые показания 08.10.2026, «другой dв» снят: dн=16, SDR 13,6 → dв=13,15,
+   // v=22,089, i=34,505; dн=110, SDR 13,6 → dв=93,2, v=2,932, i=0,098). Прежняя запись
+   // dн − 2(S+ΔS) + Δd/2 давала 12,75 и 92,1; показание 12,75 было ручным «другой dв».
    if($('danother').checked) return numStrict($('dcv').value);   // Check13 «другой dв»
    const r=pexRow(); if(!r) return NaN;
-   return +$('dsel').value - 2*(r[0]+r[1]) + r[2]/2;
+   return +$('dsel').value - 2*r[0] - r[1] + r[2]/2;   // dн − 2S − ΔS + Δd/2
   }
  if(m.sMap){ // frmtablII9 медь: dв = dн − 2S (FUN_005148a0: fld S → fadd st(0),st(0) → __vbaVarSub(dн, 2S)
              // @0x514aa6 → формат с «,» (0x441884/0x44188c) → Text2 (слот 0x54c) @0x514b56)
@@ -422,7 +423,8 @@ function calc(){
    dpOf,
    // медная страница (frmtablII9): система из Frame2, ξ из Frame6, ν/ρ из Frame5 (или по t из Combo3)
    cuSys:cuSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
-   cool:cuCool(), cuNu:numStrict($('cunu').value), cuRho:numStrict($('curho').value),
+   cool:cuCool(), cuNu:numStrict($('cunu').value)*1e-6, cuRho:numStrict($('curho').value),
+   pexSp:$('pexSp').checked, // PEX: по формуле (4) СП вместо кода программы
  });
  if(!r.ok){out.innerHTML=`<span class="warn">${r.error}</span>`;return;}
  $('hLegend').textContent=r.hLegend;
@@ -713,7 +715,7 @@ function cuHeatSync(){
  if(water){
   const t=numStrict($('tcombo').value);
   const row=isNaN(t)?null:m.t.filter(r=>r.t<=t).pop();
-  $('cunu').value=row?(row.nu*1e6).toFixed(2)+'e-6':'1.3e-6';
+  $('cunu').value=row?(cuSysVal()==='circ'?'0.36':(row.nu*1e6).toFixed(2)):'1.3'; // медь «циркуляционный»: оригинал берёт 0,36e-6 при любом t (живые скрины 08.10.2026: t=50/60/70 → 0,36, i=0,398)
   $('curho').value=row?String(row.rho):'1000';
  }
  $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply'||cuSysVal()==='hot')?'':'none';
@@ -772,11 +774,17 @@ function helpPex(){
     Re<sub>кз</sub> = ${fr('500<i>d</i><sub>p</sub>','К<sub>э</sub>')} (7);
     <i>b</i> = 1 + ${fr('lg Re<sub>φ</sub>','lg Re<sub>кз</sub>')} (8), при <i>b</i> &gt; 2 принимается <i>b</i> = 2;<br>
     К<sub>э</sub> = 1,0·10<sup>−6</sup> м (эквивалентная шероховатость PEX, п.3.5 СП 41-109-2005)<br><br>
+    <b>Внимание: в оригинале программы формула (4) содержит ошибку транскрипции</b> — множитель
+    lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) в коде умножается на всю скобку и тут же делится на него, т.е.
+    сокращается и в член 1,312(2−<i>b</i>) не входит: √<i>λ</i> = 0,5·(<i>b</i>/2 + 1,312(2−<i>b</i>))/(lg Re<sub>φ</sub> − 1).
+    Из-за этого при Re &gt; ~4·10<sup>5</sup> программа даёт потери МЕНЬШЕ, а при малых Re — БОЛЬШЕ, чем по СП
+    (до ±50 %). Клон по умолчанию повторяет программу; флажок «считать по формуле (4) СП 41-109» считает
+    строго по СП. Проверено по 34 живым точкам оригинала (совпадение в пределах точности печати).<br><br>
     Расчётный внутренний диаметр (СП 41-109-2005 (5)):
     <i>d</i><sub>p</sub> = 0,5(2<i>d</i><sub>н</sub> + Δ<i>d</i><sub>н</sub> − 4<i>S</i> − 2Δ<i>S</i>),<br>
     <span class="hint">в окне программы d<sub>в</sub> подставляется по сортаменту табл. 1 (S, ΔS, Δd
-    выбранной серии): d<sub>в</sub> = d<sub>н</sub> − 2(S+ΔS) + Δd/2 — при d<sub>н</sub>=16 и
-    «SDR 13,6 (S6,3)» это 12,75 мм, как в оригинале.</span><br><br>
+    выбранной серии) по формуле (5): d<sub>в</sub> = d<sub>н</sub> − 2S − ΔS + Δd/2 — при d<sub>н</sub>=16
+    и «SDR 13,6 (S6,3)» это 13,15 мм, при d<sub>н</sub>=110 — 93,2 мм (живые показания программы).</span><br><br>
     Кинематическая вязкость воды (Таблица 2 СП 41-109-2005, пороги программы 50/60/70/80/90 °C):
     <span class="nu">ν</span><sub>t</sub> = 10<sup>−6</sup>·{0,55; 0,47; 0,41; 0,36; 0,32} м²/с при
     t = {50; 60; 70; 80; 90} °C; при t &lt; 50 °C программа держит <span class="nu">ν</span> = 1,3·10<sup>−6</sup> м²/с

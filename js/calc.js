@@ -30,6 +30,8 @@ function fmt(x,n){
  return (Math.round(x*Math.pow(10,n))/Math.pow(10,n)).toString().replace('.',',');
 }
 function fmt2(x){return x.toFixed(2).replace('.',',');}
+// R и ΔP — ровно 3 знака, хвостовые нули НЕ отбрасываются (запрос 08.10.2026: «2,010 так и пиши»)
+function fmt3(x){return x.toFixed(3).replace('.',',');}
 
 /* ─── расход → м³/с (л/с и м³/ч — как Option1/Option2 в окне программы) ─── */
 function qToM3s(q,unit){ return unit==='mh' ? q/3600 : q/1000 }
@@ -153,13 +155,13 @@ function copperCalc(inp){
  const Z=0.5*rho*v*v*xi;
  const P=R*L+Z;
  const lines=[`Скорость v = ${fmt(v,3)} м/с`];
- if(S.f===5) lines.push(`удельные потери давления R = ${fmt(R,1)} Па/м`);
+ if(S.f===5) lines.push(`удельные потери давления R = ${fmt3(R)} Па/м`);
  else lines.push(`i = ${fmt(i,3)} м/м  (1000i = ${fmt(i*1000,3)} мм/м)`,
-                 `удельные потери давления R = ${fmt(R,1)} Па/м`);
+                 `удельные потери давления R = ${fmt3(R)} Па/м`);
  // оригинал печатает «Потери напора на участке H=… м» и «Потери давления на участке … Па»;
  // слагаемое ξ показано явно (в меди местные сопротивления НЕ через k): H = i·L + V²Σξ/(2g)
- const outH=[`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt(H,3)} м`, `потери давления = ${fmt(P,0)} Па`];
- if(S.f===5) outH.push(`Падение давления в системе отопления = ${fmt(P,0)} Па`);
+ const outH=[`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt3(H)} м`, `потери давления = ${fmt3(P)} Па`];
+ if(S.f===5) outH.push(`Падение давления в системе отопления = ${fmt3(P)} Па`);
  const notes=[];
  if(v>S.lim){ notes.push({cls:'warn',text:'Большая скорость! Рекомендуется увеличить диаметр'});
               notes.push({cls:'warn',text:S.note}); }
@@ -204,18 +206,27 @@ function pexCalc(inp){
  if(isNaN(nu)) nu=NU_FIX;
  if(isNaN(rho)||rho<=0) rho=RHO_FIX;
  const q=qToM3s(qraw,inp.qunit), d=dv/1000, v=velocity(q,dv);
- const lam=pexLambda(nu,v,d);
+ const lam=inp.pexSp?pexLambdaSP(nu,v,d):pexLambda(nu,v,d); // галка «по СП» = формула (4) с L
  const i=lam*v*v/(2*9.81*d);                        // Variant 9,81 @0x528e10
- const R=pexR(nu,v,d);                              // λV²/(2d)·10³, Па/м
+ const R=lam*v*v/(2*d)*CU.K1000;                    // λV²/(2d)·10³, Па/м
  const xi=isNaN(inp.xiSum)?0:inp.xiSum;
  const H=i*L + v*v*xi/CU.G2;
  const Z=0.5*rho*v*v*xi;
  const P=R*L+Z;
- const lines=[`Скорость v = ${fmt(v,3)} м/с`,
-              `i = ${fmt(i,3)} м/м`,
-              `удельные потери давления R = ${fmt(R,1)} Па/м`];
- const outH=[`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt(H,3)} м`,
-             `потери давления = ${fmt(P,0)} Па`];
+ // Вывод зависит от системы: ХВС/ГВС — уклон i (м/м); «отопление» — удельные потери R (Па/м).
+ // Потери напора H (м) печатаются ВСЕГДА (в т.ч. для «отопления»), чтобы блок «Потери напора на
+ // участке, м» в заголовке соответствовал содержимому; в оригинале для «отопления» H не печатался.
+ // ΔP — «Потери давления на участке» (Па); R печатается до 3 знаков с отбрасыванием хвостовых нулей
+ // (живые скрины 08.10.2026: 525,819 · 326,02 · 32602,001).
+ const lines=[`Скорость v = ${fmt(v,3)} м/с`];
+ const outH=[]; const HLINE=`Потери напора на участке H = i·L + V²Σξ/2g = ${fmt(H,3)} м`;
+ if(sys==='heat'){
+  lines.push(`R = ${fmt3(R)} Па/м`);
+  outH.push(HLINE, `Потери давления на участке ${fmt3(P)} Па`);
+ } else {
+  lines.push(`i = ${fmt(i,3)} м/м`, `удельные потери давления R = ${fmt3(R)} Па/м`);
+  outH.push(HLINE, `потери давления = ${fmt(P,0)} Па`);
+ }
  const notes=[];
  if(v>S.lim){ notes.push({cls:'warn',text:'Большая скорость! Рекомендуется увеличить диаметр'});
               notes.push({cls:'warn',text:S.note}); }
