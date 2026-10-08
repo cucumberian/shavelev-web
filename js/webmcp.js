@@ -91,7 +91,7 @@ function readResult(){
   const num=(re)=>{const m=t.match(re);return m?parseFloat(m[1].replace(',','.')):null;};
   return {
     v_ms:num(/Скорость v = ([-\d,]+) м\/с/),
-    i_mm_per_m:num(/i = ([-\d,]+) мм\/м/),
+    i_mm_per_m:(()=>{const g=re=>{const m=re.exec(t);return m?parseFloat(m[1].replace(',','.')):null;};const a=g(/(?<![\d,.])1000i = ([-\d,]+)\s*мм\/м/);if(a!==null)return a;const b=g(/(?<![\d,.])i = ([-\d,]+)\s*мм\/м/);if(b!==null)return b;const c=g(/(?<![\d,.])i = ([-\d,]+)\s*м\/м/);return c!==null?c*1000:null;})(), // i в мм/м: 1000i у меди, «i … мм/м» у стали, «i … м/м» у PEX/PEX-AL-PEX
     R_Pa_per_m:num(/R = ([-\d,]+) Па\/м/),
     H_m:num(/H = (?:i·L(?:·\(1\+k\))?|i·L \+ V²Σξ\/2g) = ([-\d,]+) м/),   // медь: H = i·L + V²Σξ/2g
     dP_Pa:num(/потери давления = ([-\d,]+) Па/),
@@ -153,7 +153,7 @@ const TOOLS=[
     }
     // медь (frmtablII9): Frame2 «Выбор системы» и Frame4 «Температура, °С» вместо стального режима
     if(a.cu_system!==undefined){
-      if(currentMat().id!=='copper') throw new Error('cu_system есть только на медной странице (frmtablII9)');
+      {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('cu_system доступен на страницах меди, PEX и PEX-AL-PEX');}
       const r=document.querySelector('input[name=cusys][value="'+a.cu_system+'"]');
       if(!r) throw new Error('cu_system должен быть cold, circ, supply или heat');
       r.checked=true; cuSysSync();
@@ -165,7 +165,7 @@ const TOOLS=[
     const CU_LOCK_T='на медной странице блок «Температура» неактивен при «холодного водоснабжения»: ν=1,3·10⁻⁶ м²/с, ρ=1000 кг/м³ (как в оригинале)';
     const CU_LOCK_C='на медной странице блок «Теплоноситель» неактивен кроме «системы отопления»: ν и ρ подставляются по температуре';
     if(a.t_c!==undefined){
-      if(currentMat().id!=='copper') throw new Error('t_c есть только на медной странице (frmtablII9)');
+      {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('t_c доступен на страницах меди, PEX и PEX-AL-PEX');}
       if(cuSysNow==='cold') throw new Error(CU_LOCK_T);
       $('tcombo').value=String(a.t_c); cuHeatSync();   // по t программа подставляет ν и ρ (пороги 50/60/70/80/90)
     }

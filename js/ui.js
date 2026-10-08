@@ -447,7 +447,7 @@ function helpHtml(){
   conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex,'metal-pex':helpMetalPex};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  // у PEX формулы ещё не разбиты построчно — показываем шаги расчёта после справки
- const inline=m?['re','rek','b','lam','i','R','H','P'].map(calcStepHtml).join(''):'';
+ const inline=m?['dp','re','rek','b','lamSp','i','R','Z','H','P'].map(calcStepHtml).join(''):'';
  const extra=(m&&m.id==='pex')?inline:'';
  return (hf?hf():'')+calcSection()+extra;
 }
@@ -479,7 +479,7 @@ function helpMetalPex(){
    t:'b=1+\\frac{\\lg Re_ф}{\\lg Re_{кв}}', step:'b',
    p:['Re<sub>ф</sub> — фактическое число Рейнольдса','Re<sub>кв</sub> — число Рейнольдса начала квадратичной области',
       'при b &gt; 2 принимается b = 2']},
-  {h:'i — гидравлический уклон, м/м', s:'СП 41-109-2005 (2) / СП 40-102-2000 (2)',
+  {h:'i — гидравлический уклон, м/м', s:'СП 40-102-2000 (2)',
    t:'i=\\frac{\\lambda\\cdot V^2}{2g\\cdot d_p}', step:'i',
    p:['λ — коэффициент гидравлического сопротивления по длине','V — средняя скорость, м/с',
       'g — ускорение свободного падения, м/с² (9,81 м/с²; 2g = 19,62 — константа программы)','d<sub>p</sub> — расчётный (внутренний) диаметр, м']},
@@ -499,7 +499,7 @@ function helpMetalPex(){
    p:['R — удельные потери давления на трение, Па/м','l — длина участка, м','Z — потери давления в местных сопротивлениях, Па']}
  ];
  const sp=$('pexSp') && $('pexSp').checked;
- const LAM_PARAMS=['b — число подобия режимов течения воды','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3)','Re<sub>ф</sub> — фактическое число Рейнольдса','d<sub>p</sub> — расчётный (внутренний) диаметр, м'];
+ const LAM_PARAMS=['b — число подобия режимов течения воды','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3 СП 41-109-2005 и п. 3.19 СП 41-102-98)','Re<sub>ф</sub> — фактическое число Рейнольдса','d<sub>p</sub> — расчётный (внутренний) диаметр, м'];
  const lamSP={h:'λ — коэффициент гидравлического сопротивления по длине', s:'СП 41-109-2005 (4) / СП 40-102-2000 (3) / СП 41-102-98 (3)',
   t:'\\sqrt{\\lambda}=0,5\\left(\\frac{b}{2}+\\frac{1,312(2-b)\\cdot\\lg(3,7\\,d_p/К_э)}{\\lg Re_ф-1}\\right)\\Big/\\lg(3,7\\,d_p/К_э)', step:sp?'lamSp':null,
   note:sp?'расчёт ведётся по этой формуле (галка «по формуле (4) СП» включена)':'по этой формуле расчёт не ведётся — включите галку «считать по формуле (4) СП 41-109»', p:LAM_PARAMS};
@@ -515,7 +515,7 @@ function helpMetalPex(){
   +'Сортамент принят по программе: наружный dн 16…90 мм, внутренний диаметр подставляет программа: <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub> − 2<i>S</i> (16→12, 20→16, 26→20, 32→26, 40→33, 50→42 мм; для 60…90 мм <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub>). Для произвольного диаметра установите флажок «другой dв» и введите значение вручную.<br><hr>';
  for(const f of F){
   h+='<div class="fHead">'+f.h+'</div>'
-   +'<span class="fLine"><span class="fSrc">'+f.s+'</span> '+tex(f.t)+(f.step?calcStepHtml(f.step):'')+'</span>'
+   +'<span class="fLine"><span class="fSrc">'+f.s+'</span> '+tex(f.t)+(f.step?(calcStepHtml(f.step)||' <span class="fNote">расчёт не ведётся — введите исходные данные и нажмите «Рассчитать»</span>'):'')+'</span>'
    +'<span class="fLegend">'+(f.note?'<span class="fParam">'+f.note+'</span>':'')+f.p.map(x=>'<span class="fParam">'+x+'</span>').join('')+'</span>';
  }
  h+='<hr><b>Внимание:</b> программа «Таблицы Шевелева» считает λ иначе — в её коде множитель lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) умножается на ВСЮ скобку (вместе с <i>b</i>/2) и затем сокращается, поэтому программа применяет √<i>λ</i> = 0,5·(<i>b</i>/2 + 1,312(2−<i>b</i>))/(lg Re<sub>ф</sub> − 1). Расчёт по умолчанию повторяет программу (совпадение с оригиналом 1-в-1), вариант СП включается галочкой «считать по формуле (4) СП 41-109» на странице PEX.<br>'
@@ -795,7 +795,7 @@ function cuHeatSync(){
  $('cunu').disabled=water; $('curho').disabled=water;
  if(water){
   const t=numStrict($('tcombo').value);
-  const row=isNaN(t)?null:m.t.filter(r=>r.t<=t).pop();
+  const row=isNaN(t)?null:(m.t||[]).filter(r=>r.t<=t).pop(); // у страницы может не быть своей таблицы ν/ρ
   $('cunu').value=row?(cuSysVal()==='circ'?'0.36':(row.nu*1e6).toFixed(2)):'1.3'; // медь «циркуляционный»: оригинал берёт 0,36e-6 при любом t (живые скрины 08.10.2026: t=50/60/70 → 0,36, i=0,398)
   $('curho').value=row?String(row.rho):'1000';
  }
@@ -831,13 +831,13 @@ function calcStepHtml(kind){
  const dn=numStrict($('dsel').value), Sst=(dn-dv)/2; // толщина стенки по сортаменту программы
  const line=(texsrc,res,note)=>' = '+tex(texsrc)+' = <b>'+res+'</b>'; // источники коэффициентов — в списке параметров
  const S={};
- S.dp=line('d_н-2S='+f(dn,2)+'-2\\cdot '+f(Sst,2),f(dv,2)+' мм','S = '+f(Sst,2)+' мм — толщина стенки по сортаменту страницы; подстановка вместо dв');
+ S.dp=line('d_p=0,5\\left(2\\cdot '+f(dn,2)+'+0-4\\cdot '+f(Sst,2)+'-0\\right)',f(dv,2)+' мм','S = '+f(Sst,2)+' мм — толщина стенки по сортаменту страницы; предельные отклонения Δd_н и ΔS программой не учитываются (приняты нулевыми), поэтому d_p = d_н − 2S');
  S.re=line('\\frac{'+f(dv,2)+'/1000\\cdot '+f(v,3)+'}{'+f(nu6*1e6,2)+'\\cdot 10^{-6}}',f(re,0),'ν — табл. 2 СП 41-109-2005'+(sys==='cold'?' (ХВС: ν=1,3·10⁻⁶ м²/с, t=10 °C)':''));
  S.rek=line('\\frac{500\\cdot '+f(d,5)+'}{1,0\\cdot 10^{-6}}',f(rek,0),'К_э = 1,0·10⁻⁶ м — п. 3.5.3');
  S.b=line('1+\\frac{\\lg '+f(re,0)+'}{\\lg '+f(rek,0)+'}',f(b,4));
  const lamSp=pexLambdaSP(nu6,v,d), lamPr=pexLambda(nu6,v,d);
- S.lamSp=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+\\frac{1,312(2-'+f(b,4)+')\\cdot '+f(l37,4)+'}{\\lg '+f(re,0)+'-1}\\right)\\Big/'+f(l37,4),f(lamSp,6)+' — вариант СП')
- S.lamProg=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+1,312(2-'+f(b,4)+')\\right)\\Big/\\left(\\lg '+f(re,0)+'-1\\right)',f(lamPr,6)+' — формула программы')
+ S.lamSp=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+\\frac{1,312(2-'+f(b,4)+')\\cdot '+f(l37,4)+'}{\\lg '+f(re,0)+'-1}\\right)\\Big/'+f(l37,4),f(Math.sqrt(lamSp),6)+' (λ = '+f(lamSp,6)+')')
+ S.lamProg=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+1,312(2-'+f(b,4)+')\\right)\\Big/\\left(\\lg '+f(re,0)+'-1\\right)',f(Math.sqrt(lamPr),6)+' (λ = '+f(lamPr,6)+')')
  S.i=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,81\\cdot '+f(d,5)+'}',f(i,3)+' м/м','g = 9,81 м/с²');
  S.R=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot '+f(d,5)+'}\\cdot 10^3',f(R,3)+' Па/м');
  S.Z=line('\\Sigma\\xi\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0)+'='+f(xi,2)+'\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0),f(0.5*rho*v*v*xi,3)+' Па')
