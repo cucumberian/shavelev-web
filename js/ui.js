@@ -324,19 +324,17 @@ function updDv(){
 function applyMestLimit(){
  const m=currentMat(); if(!m||!m.gas) return;            // только сталь ВГП («газовые»)
  const cb=$('chkMest'); if(!cb) return;
- let remembered=cb.dataset.mestRemembered;
  const dy=m.gas.du[$('dsel').value];
  const off=(dy!==undefined && dy>=80);                   // dу ≥ 80 ⟺ dн ≥ 88,5
- cb.disabled=off;
- if(off){
-  if(remembered===undefined) cb.dataset.mestRemembered=cb.checked?'1':'0';   // запомнили, как было
-  cb.checked=false; $('k').value='0';                                        // местные не учитываются
- } else if(remembered!==undefined){
-  cb.checked=(remembered==='1'); delete cb.dataset.mestRemembered;            // вернули как было
-  const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv);
- }
+ const wasOff=cb.dataset.mestOff==='1';
+ if(off!==wasOff){
+  cb.dataset.mestOff=off?'1':'0';
+  if(off){ cb.dataset.mestRemembered=cb.checked?'1':'0'; cb.checked=false; }   // запомнили, как было
+  else { cb.checked=(cb.dataset.mestRemembered!=='0'); delete cb.dataset.mestRemembered; }
+  cb.disabled=off;
+  if(cb.onchange) cb.onchange();   // режим и k ходят за состоянием галочки (как в программе)
+ } else cb.disabled=off;
 }
-
 function updDu(){
  const m=currentMat(), el=$('duLine');
  el.parentElement.style.display=m.gas?'':'none'; // у прочих материалов строки dу нет
