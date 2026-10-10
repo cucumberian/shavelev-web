@@ -61,7 +61,10 @@ function applySysVisibility(){
   if($('chkMest').dataset.forced){ delete $('chkMest').dataset.forced; $('chkMest').checked=true; } // вернулись на сталь/э/с
   $('chkMest').disabled=false;$('mode').disabled=false;$('k').disabled=false;
   const cold=document.querySelector('input[name=sys]:checked').value==='cold';
-  $('rho').disabled=false;if(cold)$('nu').value='0';$('nu').disabled=cold;$('nuPreset').disabled=cold;
+  $('rho').disabled=false;
+  // у стали/э-с ν входит в формулы: в ХВС это 1,3·10⁻⁶ (вода 10 °C), а не 0; у прочих страниц ν не используется
+  if(cold) $('nu').value=usesSys(currentMat().id)?'1.3e-6':'0';
+  $('nu').disabled=cold;$('nuPreset').disabled=cold;
  }
 }
 
@@ -315,6 +318,25 @@ function updDv(){
 /* dу и тип труб по dн/s — как в программе (Label13 «Диаметр условного прохода dу=» +
    строки «трубы легкие/обыкновенные/усиленные» 0x4418a0/c0/ec). dу — Таблица 1 кн. Шевелева;
    «обыкновенная» стенка — по книжному dв (у 21.3/26.8 из четырёх — 2,8) */
+/* Местные сопротивления у газовых стальных труб: при dу ≥ 80 (dн ≥ 88,5 по ГОСТ 3262-75)
+   программа отключает галочку «учесть потери на местные сопротивления» — местные не учитываются
+   (живое наблюдение 10.10.2026; на малых диаметрах галочка доступна). */
+function applyMestLimit(){
+ const m=currentMat(); if(!m||!m.gas) return;            // только сталь ВГП («газовые»)
+ const cb=$('chkMest'); if(!cb) return;
+ let remembered=cb.dataset.mestRemembered;
+ const dy=m.gas.du[$('dsel').value];
+ const off=(dy!==undefined && dy>=80);                   // dу ≥ 80 ⟺ dн ≥ 88,5
+ cb.disabled=off;
+ if(off){
+  if(remembered===undefined) cb.dataset.mestRemembered=cb.checked?'1':'0';   // запомнили, как было
+  cb.checked=false; $('k').value='0';                                        // местные не учитываются
+ } else if(remembered!==undefined){
+  cb.checked=(remembered==='1'); delete cb.dataset.mestRemembered;            // вернули как было
+  const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv);
+ }
+}
+
 function updDu(){
  const m=currentMat(), el=$('duLine');
  el.parentElement.style.display=m.gas?'':'none'; // у прочих материалов строки dу нет
@@ -325,6 +347,7 @@ function updDu(){
  const ord=m.gas.ord[dn]!==undefined?m.gas.ord[dn]:w[1];
  const typ=s===ord?'обыкновенные':(s===Math.max(...w)?'усиленные':'легкие');
  el.textContent=`Диаметр условного прохода dу=${dy}\nтрубы ${typ}`;
+ applyMestLimit();
 }
 
 /* Строгий разбор числа: запятая как разделитель допустима, мусор ('1e') — NaN;
@@ -364,7 +387,10 @@ function curDv(){
    if($('danother').checked) return numStrict($('dcv').value);
    const dn=parseFloat($('dsel').value), s=parseFloat($('tsel').value);
    if(isNaN(dn)||isNaN(s)) return NaN;
-   return dn-2*s-((m.gas||dn<300)?1:0);
+   // «−1 мм» — только у «неновых» (живые точки 10.10.2026: «новые» dн=26,8 S=2,35 → dв=22,1;
+   // «неновые» dн=26,8 S=2,5 → dв=20,8; dн=114 S=4,5 → dв=104)
+   const oldWear=document.querySelector('input[name=wear]:checked').value==='old';
+   return dn-2*s-((oldWear&&dn<300)?1:0);
  }
  if(m.cls){ // frmtablII3: dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и «неновые» (хвост FUN_004b1b00)
    if($('danother').checked) return numStrict($('dcv').value);
@@ -407,15 +433,22 @@ function calc(){
  const m=currentMat();
  const dpOf=(d)=>{
    if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
-     const dn=+it[0],s=parseFloat($('tsel').value);return isNaN(s)?NaN:dn-2*s-1;}
+     const dn=+it[0],s=parseFloat($('tsel').value);if(isNaN(s))return NaN;
+     // «−1 мм» (коррозия/отложения) — только у «неновых» и при dн<300 (живая точка 10.10.2026:
+     // «новые» dн=26,8 S=2,35 → dв=22,1; «неновые» dн=26,8 S=2,5 → dв=20,8)
+     return dn-2*s-((document.querySelector('input[name=wear]:checked').value==='old'&&dn<300)?1:0);}
    if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
      return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
    if(m.dvMap){const x=m.dvMap[d];return x===undefined?NaN:x;}
    return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
  };
+ // оригинал перед расчётом проверяет введённый коэффициент (MessageBox «Вы не ввели значение коэффициента», BSTR 0x047b70)
+ if(currentMat().usesK!==false && $('chkMest') && $('chkMest').checked && String($('k').value).trim()===''){
+  out.innerHTML='<span class="warn">Вы не ввели значение коэффициента</span>'; return; }
  const r=shevCalc({
    mat:m.id,
+   sys:(document.querySelector('input[name=sys]:checked')||{}).value,
    wear:document.querySelector('input[name=wear]:checked').value,
    dv_mm:curDv(),
    q:numStrict($('q').value), qunit:$('qunit').value,
@@ -444,12 +477,13 @@ const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="f
 function helpHtml(){
  const m=currentMat();
  const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
-  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex,'metal-pex':helpMetalPex};
+  conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
  // у PEX формулы ещё не разбиты построчно — показываем шаги расчёта после справки
  const inline=m?['dp','re','rek','b','lamSp','i','R','Z','H','P'].map(calcStepHtml).join(''):'';
  const extra=(m&&m.id==='pex')?inline:'';
- return (hf?hf():'')+calcSection()+extra;
+ const page=(typeof HELP_PAGES!=='undefined' && HELP_PAGES[m.id])?renderCalcHelp(m.id):'';
+ return page || ((hf?hf():'')+calcSection()+extra);
 }
 function showHelp(){
  const h=$('help');
@@ -459,72 +493,7 @@ function showHelp(){
 }
 /* Справка страницы PEX-AL-PEX (металлополимерные трубы): те же зависимости, что у PEX, но
    свои ссылки (СП 41-102-98 / СП 40-102-2000) и своя подстановка dв = dн − 2S. */
-/* Справка страницы PEX-AL-PEX: формулы — данными, в порядке вычисления. Порядок блока:
-   заголовок (считаемый параметр) → строка «документ + номер» с формулой = подстановка = значение →
-   метаданные (пометки) → список параметров с источниками коэффициентов. */
-function helpMetalPex(){
- const F=[
-  {h:'d<sub>p</sub> — расчётный (приведённый внутренний) диаметр, м', s:'СП 41-102-98 (4)',
-   t:'d_p=0,5\\left(2d_н+\\Delta d_н-4S-2\\Delta S\\right)', step:'dp', note:'подстановка вместо dв',
-   p:['d<sub>н</sub> — наружный диаметр, м','Δd<sub>н</sub> — предельное отклонение наружного диаметра, м',
-      'S — номинальная толщина стенки, м','ΔS — предельное отклонение толщины стенки, м']},
-  {h:'Re<sub>ф</sub> — фактическое число Рейнольдса', s:'СП 41-102-98 (5)',
-   t:'Re_ф=\\frac{d_p\\cdot V}{\\nu_t}', step:'re',
-   p:['d<sub>p</sub> — расчётный диаметр, м','V — средняя скорость, м/с',
-      'ν<sub>t</sub> — коэффициент кинематической вязкости воды при температуре t, м²/с (табл. 2 СП 41-109-2005)']},
-  {h:'Re<sub>кв</sub> — число Рейнольдса, соответствующее началу квадратичной области сопротивления', s:'СП 41-102-98 (6)',
-   t:'Re_{кв}=\\frac{500\\,d_p}{К_э}', step:'rek',
-   p:['d<sub>p</sub> — расчётный диаметр, м','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3 СП 41-109-2005)']},
-  {h:'b — число подобия режимов течения воды', s:'СП 41-102-98 (7)',
-   t:'b=1+\\frac{\\lg Re_ф}{\\lg Re_{кв}}', step:'b',
-   p:['Re<sub>ф</sub> — фактическое число Рейнольдса','Re<sub>кв</sub> — число Рейнольдса начала квадратичной области',
-      'при b &gt; 2 принимается b = 2']},
-  {h:'i — гидравлический уклон, м/м', s:'СП 40-102-2000 (2)',
-   t:'i=\\frac{\\lambda\\cdot V^2}{2g\\cdot d_p}', step:'i',
-   p:['λ — коэффициент гидравлического сопротивления по длине','V — средняя скорость, м/с',
-      'g — ускорение свободного падения, м/с² (9,81 м/с²; 2g = 19,62 — константа программы)','d<sub>p</sub> — расчётный (внутренний) диаметр, м']},
-  {h:'R — удельные потери давления на трение, Па/м', s:'СП 41-102-98 (2)',
-   t:'R=\\frac{\\lambda\\cdot V^2}{2d_p}\\cdot 10^3', step:'R',
-   p:['λ — коэффициент гидравлического сопротивления по длине','V — средняя скорость движения воды, м/с','d<sub>p</sub> — расчётный (внутренний) диаметр, м']},
-  {h:'R<sub>t</sub> — удельные потери давления с учётом температуры, Па/м', s:'СП 41-102-98 (8)',
-   t:'R_t=R\\cdot\\alpha', step:null, note:'по этой формуле расчёт не ведётся: коэффициент α (табл. 2 СП 41-102-98) программа не применяет', p:['R — удельные потери давления, Па/м','α — коэффициент, учитывающий температуру воды (табл. 2 СП 41-102-98)']},
-  {h:'Z — потери давления в местных сопротивлениях, Па', s:'СП 41-102-98 (9)',
-   t:'Z=\\Sigma\\xi\\cdot\\frac{V^2}{2}\\cdot\\rho', step:'Z',
-   p:['Σξ — сумма коэффициентов местных сопротивлений (табл. 3 СП 41-102-98)','V — средняя скорость, м/с','ρ — плотность воды, кг/м³']},
-  {h:'H — потери напора на участке, м', s:'СП 41-109-2005 (1)',
-   t:'H=L\\cdot i+\\frac{V^2\\cdot\\Sigma\\xi}{2g}', step:'H',
-   p:['L — длина участка, м','i — гидравлический уклон, м/м','V — средняя скорость, м/с','Σξ — сумма коэффициентов местных сопротивлений','g — ускорение свободного падения, м/с² (9,81 м/с²; 2g = 19,62)']},
-  {h:'ΔP — потери давления на участке, Па', s:'СП 41-102-98 (1)',
-   t:'\\Delta P=R\\cdot l+Z', step:'P',
-   p:['R — удельные потери давления на трение, Па/м','l — длина участка, м','Z — потери давления в местных сопротивлениях, Па']}
- ];
- const sp=$('pexSp') && $('pexSp').checked;
- const LAM_PARAMS=['b — число подобия режимов течения воды','К<sub>э</sub> — эквивалентная шероховатость, м (1,0·10⁻⁶ м — п. 3.5.3 СП 41-109-2005 и п. 3.19 СП 41-102-98)','Re<sub>ф</sub> — фактическое число Рейнольдса','d<sub>p</sub> — расчётный (внутренний) диаметр, м'];
- const lamSP={h:'λ — коэффициент гидравлического сопротивления по длине', s:'СП 41-109-2005 (4) / СП 40-102-2000 (3) / СП 41-102-98 (3)',
-  t:'\\sqrt{\\lambda}=0,5\\left(\\frac{b}{2}+\\frac{1,312(2-b)\\cdot\\lg(3,7\\,d_p/К_э)}{\\lg Re_ф-1}\\right)\\Big/\\lg(3,7\\,d_p/К_э)', step:sp?'lamSp':null,
-  note:sp?'расчёт ведётся по этой формуле (галка «по формуле (4) СП» включена)':'по этой формуле расчёт не ведётся — включите галку «считать по формуле (4) СП 41-109»', p:LAM_PARAMS};
- const lamPR={h:'λ — коэффициент гидравлического сопротивления по длине (формула программы)', s:'программа «Таблицы Шевелева»',
-  t:'\\sqrt{\\lambda}=0,5\\left(\\frac{b}{2}+1,312(2-b)\\right)\\Big/\\left(\\lg Re_ф-1\\right)', step:sp?null:'lamProg',
-  note:sp?'по этой формуле расчёт не ведётся':'расчёт ведётся по этой формуле (как в оригинале; множитель lg(3,7d_p/К_э) в коде сокращается)', p:LAM_PARAMS};
- F.splice(4,0,lamSP,lamPR);
- let h='<b>металлополимерные трубы (PEX-AL-PEX)</b><hr>'
-  +'Гидравлический расчет металлополимерных трубопроводов (PEX-AL-PEX) производится на основании п.3.4 '
-  +'<a href="gost/sp41_102_98.doc" target="_blank" class="fdoc">СП 41-102-98</a> и п.3.5 '
-  +'<a href="gost/sp40_102_2000.doc" target="_blank" class="fdoc">СП 40-102-2000</a>.<br><br>'
-  +'При расчете металлополимерных труб произвольного диаметра установите флажок «другой» внутренний диаметр и введите значение соответствующего расчетного внутреннего диаметра, мм.<br><hr>'
-  +'Сортамент принят по программе: наружный dн 16…90 мм, внутренний диаметр подставляет программа: <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub> − 2<i>S</i> (16→12, 20→16, 26→20, 32→26, 40→33, 50→42 мм; для 60…90 мм <i>d</i><sub>в</sub> = <i>d</i><sub>н</sub>). Для произвольного диаметра установите флажок «другой dв» и введите значение вручную.<br><hr>';
- for(const f of F){
-  h+='<div class="fHead">'+f.h+'</div>'
-   +'<span class="fLine"><span class="fSrc">'+f.s+'</span> '+tex(f.t)+(f.step?(calcStepHtml(f.step)||' <span class="fNote">расчёт не ведётся — введите исходные данные и нажмите «Рассчитать»</span>'):'')+'</span>'
-   +'<span class="fLegend">'+(f.note?'<span class="fParam">'+f.note+'</span>':'')+f.p.map(x=>'<span class="fParam">'+x+'</span>').join('')+'</span>';
- }
- h+='<hr><b>Внимание:</b> программа «Таблицы Шевелева» считает λ иначе — в её коде множитель lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) умножается на ВСЮ скобку (вместе с <i>b</i>/2) и затем сокращается, поэтому программа применяет √<i>λ</i> = 0,5·(<i>b</i>/2 + 1,312(2−<i>b</i>))/(lg Re<sub>ф</sub> − 1). Расчёт по умолчанию повторяет программу (совпадение с оригиналом 1-в-1), вариант СП включается галочкой «считать по формуле (4) СП 41-109» на странице PEX.<br>'
-  +'На живой точке <i>d</i><sub>в</sub> = 12 мм, Q = 1 л/с: программа i = 8,122 м/м, формула СП — 6,411 м/м (−21 %).<br><br>'
-  +'Вязкость и плотность по температуре: 50/60/70/80/90 °C → ν = 0,55/0,47/0,41/0,36/0,32·10<sup>−6</sup> м²/с, ρ = 990/980/980/970/970 кг/м³; при t &lt; 50 °C ν = 1,3·10<sup>−6</sup> (как в ХВС).<br>'
-  +'Пределы скорости: ХВС 4 м/с, ГВС 3 м/с, отопление 2 м/с.<br><br>'
-  +'Местные сопротивления — список ξ (12 позиций + «другие», счётчики «шт.»); последняя позиция — «соединение с обжимной гайкой».';
- return h;
-}
+
 /* Справка стальной страницы — как в оригинальной программе (frmtablII1 help, 0x50395) */
 function helpSteel(){
  // верх — как в справке оригинальной программы (frmtablII1 help, 0x50395): формулы «в столбик»
@@ -564,8 +533,8 @@ function helpSteel(){
  <b>Пластик</b> (8): i = 0,000685·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup>;
  <b>Стекло</b> (9): i = 0,000745·v<sup>1,774</sup> / d<sub>р</sub><sup>1,226</sup> — не A·v²/d<sup>e</sup>, степень у v своя<br>
  <span class="hint">ν воды = 1,3·10⁻⁶ м²/с (t=10°C); пороги: 1,2 м/с = 9,2·10⁵·ν.<br>
-  d в метрах. Обозначения — одна величина: d_р (книга) = dp (справка программы) = dв в интерфейсе,
-  подставляется d_р = dв/1000. dв берётся из таблиц (для пластика по ГОСТ dв = dн − 2·e ном),
+  d в метрах. Обозначения — одна величина: d_{\\text{р}} (книга) = dp (справка программы) = dв в интерфейсе,
+  подставляется d_{\\text{р}} = dв/1000. dв берётся из таблиц (для пластика по ГОСТ dв = dн − 2·e ном),
   «не по ГОСТу» — вводится вручную.</span>`;
 }
 
@@ -831,9 +800,9 @@ function calcStepHtml(kind){
  const dn=numStrict($('dsel').value), Sst=(dn-dv)/2; // толщина стенки по сортаменту программы
  const line=(texsrc,res,note)=>' = '+tex(texsrc)+' = <b>'+res+'</b>'; // источники коэффициентов — в списке параметров
  const S={};
- S.dp=line('d_p=0,5\\left(2\\cdot '+f(dn,2)+'+0-4\\cdot '+f(Sst,2)+'-0\\right)',f(dv,2)+' мм','S = '+f(Sst,2)+' мм — толщина стенки по сортаменту страницы; предельные отклонения Δd_н и ΔS программой не учитываются (приняты нулевыми), поэтому d_p = d_н − 2S');
+ S.dp=line('0,5\\left(2\\cdot '+f(dn,2)+'+0-4\\cdot '+f(Sst,2)+'-0\\right)',f(dv,2)+' мм','S = '+f(Sst,2)+' мм — толщина стенки по сортаменту страницы; предельные отклонения Δd_{\\text{н}} и ΔS программой не учитываются (приняты нулевыми), поэтому d_p = d_{\\text{н}} − 2S');
  S.re=line('\\frac{'+f(dv,2)+'/1000\\cdot '+f(v,3)+'}{'+f(nu6*1e6,2)+'\\cdot 10^{-6}}',f(re,0),'ν — табл. 2 СП 41-109-2005'+(sys==='cold'?' (ХВС: ν=1,3·10⁻⁶ м²/с, t=10 °C)':''));
- S.rek=line('\\frac{500\\cdot '+f(d,5)+'}{1,0\\cdot 10^{-6}}',f(rek,0),'К_э = 1,0·10⁻⁶ м — п. 3.5.3');
+ S.rek=line('\\frac{500\\cdot '+f(d,5)+'}{1,0\\cdot 10^{-6}}',f(rek,0),'K_{\\text{э}} = 1,0·10⁻⁶ м — п. 3.5.3');
  S.b=line('1+\\frac{\\lg '+f(re,0)+'}{\\lg '+f(rek,0)+'}',f(b,4));
  const lamSp=pexLambdaSP(nu6,v,d), lamPr=pexLambda(nu6,v,d);
  S.lamSp=line('0,5\\left(\\frac{'+f(b,4)+'}{2}+\\frac{1,312(2-'+f(b,4)+')\\cdot '+f(l37,4)+'}{\\lg '+f(re,0)+'-1}\\right)\\Big/'+f(l37,4),f(Math.sqrt(lamSp),6)+' (λ = '+f(lamSp,6)+')')
@@ -841,8 +810,8 @@ function calcStepHtml(kind){
  S.i=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,81\\cdot '+f(d,5)+'}',f(i,3)+' м/м','g = 9,81 м/с²');
  S.R=line('\\frac{'+f(lam,6)+'\\cdot '+f(v,3)+'^2}{2\\cdot '+f(d,5)+'}\\cdot 10^3',f(R,3)+' Па/м');
  S.Z=line('\\Sigma\\xi\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0)+'='+f(xi,2)+'\\cdot\\frac{'+f(v,3)+'^2}{2}\\cdot '+f(rho,0),f(0.5*rho*v*v*xi,3)+' Па')
- S.H=line(''+f(L,0)+'\\cdot '+f(i,3)+'+\\frac{'+f(v,3)+'^2\\cdot '+f(xi,2)+'}{2\\cdot 9,81}',f(H,3)+' м',xi?'Σξ = '+f(xi,2)+' (список местных сопротивлений страницы)':'Σξ = 0 (ничего не отмечено)');
- S.P=line(''+f(R,3)+'\\cdot '+f(L,0)+'+0,5\\cdot '+f(rho,0)+'\\cdot '+f(v,3)+'^2\\cdot '+f(xi,2),f(P,3)+' Па',sys==='cold'?'ρ = 1000 кг/м³ (ХВС)':'ρ — по температуре/вводу');
+ S.H=line(f(L,0)+'\\cdot '+f(i,3)+'+\\frac{'+f(v,3)+'^2\\cdot '+f(xi,2)+'}{2\\cdot 9,81}',f(H,3)+' м',xi?'Σξ = '+f(xi,2)+' (список местных сопротивлений страницы)':'Σξ = 0 (ничего не отмечено)');
+ S.P=line(f(R,3)+'\\cdot '+f(L,0)+'+0,5\\cdot '+f(rho,0)+'\\cdot '+f(v,3)+'^2\\cdot '+f(xi,2),f(P,3)+' Па',sys==='cold'?'ρ = 1000 кг/м³ (ХВС)':'ρ — по температуре/вводу');
  return S[kind]||'';
 }
 /* Синие ссылки на документы страницы: у PEX-AL-PEX их две («СП 41-102-98» и «СП40-102-2000»),
@@ -944,16 +913,34 @@ document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.onchange=fillDiamet
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();}; // как в программе: при «другой» dp-инпут редактируем, блок dу/классов/dн-S-dв блокируется
 document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм только у «неновых» (VarCmpLe(dв,300) And Option1)
-$('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;if(!on)$('k').value='';}; // как в программе (FUN_00480b10): без местных сопротивлений k блокируется и очищается
+$('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;
+ if(!on){ $('k').value='0'; }                                 // 10.10.2026: не оставляем пусто — 0 (иначе подстановка в справке вырождается в NaN)
+ else { const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); } // включаем — k снова по режиму (0,3 и т. п.)
+}; // как в программе (FUN_00480b10): без местных сопротивлений k блокируется и очищается
 $('nuPreset').onchange=e=>{if(e.target.value){const[a,b]=e.target.value.split('|');$('nu').value=a;$('rho').value=b;}};
 $('mode').onchange=()=>{const kv=K_MODE[$('mode').value];if(kv!==undefined)$('k').value=String(kv);}; // k по режиму, как в программе
+const T_NU_RHO={40:['0.66e-6','1000'],45:['0.605e-6','1000'],50:['0.55e-6','1000'],55:['0.51e-6','1000'],60:['0.47e-6','1000'],65:['0.44e-6','1000'],70:['0.41e-6','1000'],75:['0.385e-6','1000'],80:['0.36e-6','1000'],85:['0.34e-6','1000'],90:['0.32e-6','1000'],95:['0.30e-6','1000']}; // ν — точная таблица EXE FUN_0047de20 (реверс 10.10.2026), ρ — книжные пресеты
 $('sysCold').onchange=()=>{fillModes(false);$('mode').onchange();
+ $('tSteelRow').style.display='none'; $('nuRow').style.display='none'; $('rhoRow').style.display='none'; // в оригинале полей ν/ρ на стальной странице нет
+ if(usesSys(currentMat().id)){ $('mestRow').style.display=''; $('modeRow').style.display=''; $('kRow').style.display='';
+  $('chkMest').checked=true; const kv0=K_MODE[$('mode').value]; if(kv0!==undefined) $('k').value=String(kv0); }
  // холодное водоснабжение: температура/ν блокируются, подставляются ν=0 и ρ=1000 (как в программе;
  // на расчёт ν не влияет — все формулы ν-подставленные, ν=1,3·10⁻⁶ «зашита» в константы 0,684/0,867)
- $('nu').value='0';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';};
+ $('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';
+}; // ν входит в формулы стали (ХВС: вода 10 °C)
 $('sysHot').onchange=()=>{fillModes(false);$('mode').onchange();
- $('nu').disabled=false;$('nuPreset').disabled=false;};
+ $('nu').disabled=false;$('nuPreset').disabled=false;
+ // ГВС стали: в оригинале есть только подписанное поле «t = … °C», местные сопротивления и поля ν/ρ отсутствуют
+ if(usesSys(currentMat().id)){ $('tSteelRow').style.display=''; $('nuRow').style.display='none'; $('rhoRow').style.display='none';
+  $('mestRow').style.display='none'; $('modeRow').style.display='none'; $('kRow').style.display='none';
+  $('chkMest').checked=false; $('k').value='0';           // в ГВС местные сопротивления в оригинале отсутствуют
+  if(!$('tSteel').value||$('tSteel').value==='40') $('tSteel').value='60'; $('tSteel').onchange(); } };
+$('tSteel').onchange=()=>{ const p=T_NU_RHO[$('tSteel').value]; if(p){ $('nu').value=p[0]; $('rho').value=p[1]; } };
+$('tSteel').onchange();
 fillModes(false);
+// сталь/э-с: полей ν и ρ в оригинале нет — они скрыты, значения подставляет программа
+// (ХВС: ν=0, ρ=1000; ГВС: по выбранной t из поля «t = … °C»)
+if(usesSys(currentMat().id)){ $('nuRow').style.display='none'; $('rhoRow').style.display='none'; }
 applySysVisibility(); // чугунная страница: скрыть система/режим/местные/k, зафиксировать ν/ρ (t=10°C)
 $('mode').onchange(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
 fillXiGrid();

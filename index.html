@@ -6,6 +6,7 @@
 <title>Таблицы Шевелева — клон</title>
 <link rel="icon" type="image/x-icon" href="shev.ico"><!-- иконка извлечена из shev.exe (RT_GROUP_ICON id=1) -->
 <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
 </head>
 <body>
 <div id="app">
@@ -86,7 +87,23 @@
  <div class="row full" id="sysRow"><b>Система:</b>
    <label><input type="radio" name="sys" id="sysCold" value="cold" checked> холодного водоснабжения</label>
    <label><input type="radio" name="sys" id="sysHot" value="hot"> горячего водоснабжения</label></div>
- <div class="row"><b>ν, м²/с:</b>
+ <div class="row" id="tSteelRow" style="display:none"><b>t =</b>
+   <span class="ctl"><select id="tSteel" size="1">
+    <option value="40">40</option>
+    <option value="45">45</option>
+    <option value="50">50</option>
+    <option value="55">55</option>
+    <option value="60" selected>60</option>
+    <option value="65">65</option>
+    <option value="70">70</option>
+    <option value="75">75</option>
+    <option value="80">80</option>
+    <option value="85">85</option>
+    <option value="90">90</option>
+    <option value="95">95</option>
+   </select> <b>°C</b></span>
+   <span class="hint" id="tSteelHint">для ГВС рекомендуется t=60°C</span></div>
+ <div class="row" id="nuRow"><b>ν, м²/с:</b>
    <span class="ctl"><input type="text" id="nu" value="1.3e-6">
    <span class="hint" id="nuT" style="display:none">t=10°C (как в программе)</span>
    <select id="nuPreset" size="1">
@@ -108,7 +125,7 @@
     <option value="0.326e-6|965.3">t=90°C</option>
     <option value="0.309e-6|961.9">t=95°C</option>
    </select></span></div>
- <div class="row"><b>ρ, кг/м³:</b>
+ <div class="row" id="rhoRow"><b>ρ, кг/м³:</b>
    <span class="ctl"><input type="text" id="rho" value="1000">
    <span class="hint" id="rhoHint">для ГВС рекомендуется t=60°C</span></span></div>
  <div class="row full" id="mestRow"><label><input type="checkbox" id="chkMest" checked> учесть потери на местные сопротивления</label></div>
@@ -189,8 +206,20 @@
 </div>
 
 <!-- Порядок важен: формулы → данные → UI (классические скрипты: работает с file:// без сервера) -->
-<link rel="stylesheet" href="vendor/katex/katex.min.css">
+
 <script src="vendor/katex/katex.min.js"></script>
+<script src="js/help.js"></script>
+<script src="js/help/steel.js"></script>
+<script src="js/help/steel-es.js"></script>
+<script src="js/help/ci.js"></script>
+<script src="js/help/asbes.js"></script>
+<script src="js/help/plastic.js"></script>
+<script src="js/help/conc.js"></script>
+<script src="js/help/grp.js"></script>
+<script src="js/help/glass.js"></script>
+<script src="js/help/copper.js"></script>
+<script src="js/help/pex.js"></script>
+<script src="js/help/metal-pex.js"></script>
 <script src="js/tex.js"></script>
 <script src="js/formulas.js"></script>
 <script src="js/data/registry.js"></script>

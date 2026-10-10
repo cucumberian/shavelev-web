@@ -5,6 +5,7 @@
 
 const G2 = 19.62;   // 2g — свёрнуто в константах λ→A
 const G  = 9.81;    // g — для R = ρ·g·i (код: VA 0x4af565)
+const GP=9.80665; // для R/ΔP (EXE: 9,80665 везде; 9,81 только в i у PEX)
 
 const F = {
  // новые стальные (2а): λ=0.0159(1+0.684/v)^0.226/d^0.226
@@ -101,14 +102,29 @@ function pexLambdaSP(nu,v,d){
 /* Выбор формулы по материалу/состоянию.
    wear: 'new'|'old'; mat — id материала; v м/с; d — внутренний диаметр, м.
    Возврат {A, e} → i = A·v²/d^e */
-function iCalc(wear, mat, v, d){
+/* ─── СТАЛЬ/э-с по EXE (FUN_0047e8d0 / FUN_004a22c0), найдено реверсом 10.10.2026 (агент const-check) ───
+   ν входит в формулы; k_э: 1,9·10⁻⁶ м (новые), 1,5·10⁻⁶ м (неновые); g = 9,81 (2g = 19,62) для i.
+   Ветка у «неновых» выбирается по v/(d·ν) с порогом ≈9,2·10⁶ (дизасм 0x47fbfb, __vbaVarTstGe):
+   мало → (5) i = (k_э + ν/v)^0,3/d^0,3·v²/(2g·d);  много → (6) i = (0,021/(2g))·v²/d^1,3. */
+const STEEL_KE_NEW=1.9e-6, STEEL_KE_OLD=1.5e-6, STEEL_SEL=9.2e5; // EXE: v/ν ≥ 9,2·10⁵ → (6) (трассировка 10.10.2026)
+function steelI(v,d,nu,wear){
+ const n=(nu>0)?nu:1.3e-6;
+ if(wear==='new') return 0.312*Math.pow(STEEL_KE_NEW+n/v,0.226)/Math.pow(d,0.226)*v*v/(2*9.81*d);
+ if(v/n < STEEL_SEL) return Math.pow(STEEL_KE_OLD+n/v,0.3)/Math.pow(d,0.3)*v*v/(2*9.81*d);
+ return (0.021/19.62)*v*v/Math.pow(d,1.3);
+}
+function iCalc(wear, mat, v, d, sys){
   if(mat==='steel'||mat==='steel-es'){
     if(wear==='new') return {A:F.newSteel(v), e:1.226};
+    // поправка (7) (1+0,867/v)^0,3 применяется только в ХВС: живая точка 10.10.2026 — ГВС t=60, dв=91,3, Q=3 л/с
+    // даёт 1000i=5,048 = формула (6), а то же v в ХВС → 5,916 = формула (7)
+    if(sys==='hot') return {A:F.oldA(), e:1.3};
     return v>=1.2 ? {A:F.oldA(), e:1.3} : {A:F.oldB(v), e:1.3};
   }
   if(mat==='ci') {
     if(wear==='new') return {A:F.newCI(v), e:1.284};
-    return v>=1.2 ? {A:F.oldA(), e:1.3} : {A:F.oldB(v), e:1.3};
+    // EXE (FUN_004ae2c0): (6) хранит 0,00107 (@0x4aee17), порог v ≥ 1,2 (@0x4aedac)
+    return v>=1.2 ? {A:0.00107, e:1.3} : {A:F.oldB(v), e:1.3};
   }
   if(mat==='asbes')   return {A:F.asbes(v),  e:1.190};
   if(mat==='conc')    return {A:F.conc(v),   e:1.190};
@@ -120,5 +136,5 @@ function iCalc(wear, mat, v, d){
 
 // экспорт для node-тестов (в браузере window есть, в node — global)
 if (typeof module!=='undefined' && module.exports){
-  module.exports={G,G2,F,iCalc,CU,cuI2,cuI3,cuLambda,cuR5,PEX_KE,pexLambda,pexR,pexLambdaSP};
+  module.exports={G,G2,GP,F,iCalc,steelI,CU,cuI2,cuI3,cuLambda,cuR5,PEX_KE,pexLambda,pexR,pexLambdaSP};
 }

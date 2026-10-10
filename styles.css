@@ -198,12 +198,21 @@ fieldset.off input[type=radio],fieldset.off input[type=checkbox],
 .fields .row.xiOtherRow>#xiotherval{width:8em}
 
 /* Каждая формула справки — отдельной строкой, с номером и источником */
-.fLine{display:block;margin:.35em 0;padding-left:0}
-.fSrc{display:inline-block;min-width:11.5em;color:#666;font-size:.9em}
+.fLine{display:block;margin:.1em 0 .35em;padding-left:0}
+.fSrc{display:block;margin:.5em 0 .1em;color:#666;font-size:.9em}
 .fNote{color:#666;font-size:.88em}
-.fLegend{display:block;margin:-.1em 0 .6em 11.5em;color:#666;font-size:.88em}
+.fLegend{display:block;margin:.1em 0 .6em 0;color:#666;font-size:.88em}
 .fLegend .fParam{display:block;margin:.06em 0;padding-left:0}
-.fHead{font-weight:600;margin:.55em 0 .1em}
+.fBlock{margin:0 0 1.25em}          /* гэп между формулами (просьба 10.10.2026) */
+.fBlock:last-child{margin-bottom:.4em}
+.fBlock.fUnused{opacity:.55}          /* по этой формуле расчёт не ведётся — блок лёгкий */
+.fBlock.fUnused .fHead{font-weight:500;color:#8a8a8a}
+.fBlock.fUnused .fLine{color:#6f6f6f}
+.fHead{font-weight:600;margin:0 0 .1em}
+/* поле «t = … °C» на страницах стали (ГВС): вдвое шире обычного селекта (просьба 10.10.2026) */
+#tSteel{min-width:0}
+#tSteelRow{grid-template-columns:minmax(0,1fr) 330px}   /* поле температуры вдвое шире (2×165px) */
+#tSteelRow .hint{grid-column:1/-1;text-align:left;white-space:normal;min-width:0}
 .fStep{margin:-.1em 0 .6em 11.5em}
 .fStep .calcStep{margin:.25em 0 .5em;padding:.35em .5em}
 .fLegend .calcStep{margin:.35em 0 0;padding:.3em .45em}

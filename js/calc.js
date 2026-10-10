@@ -40,12 +40,12 @@ function qToM3s(q,unit){ return unit==='mh' ? q/3600 : q/1000 }
 function velocity(q_m3s,dp_mm){ const d=dp_mm/1000; return q_m3s/(Math.PI*d*d/4) }
 
 /* ─── удельные потери (уклон): i = A·v²/dp^e, A ≡ λ/(2g); формулы — formulas.js ─── */
-function gradient(mat,wear,v,dp_mm){
- const d=dp_mm/1000; const {A,e}=iCalc(wear,mat,v,d);
+function gradient(mat,wear,v,dp_mm,sys){
+ const d=dp_mm/1000; const {A,e}=iCalc(wear,mat,v,d,sys);
  return {A,e,i:A*v*v/Math.pow(d,e)};
 }
 /* ─── R = ρ·g·i (Па/м) и H = i·L·(1+k) (м) ─── */
-function pressure(i,rho){ return i*(rho||RHO_FIX)*G }
+function pressure(i,rho){ return i*(rho||RHO_FIX)*GP } // EXE: g = 9,80665 (трассировка 10.10.2026)
 function head(i,L,k){ return i*L*(1+(k||0)) }
 
 /* ─── значения теплоносителя по умолчанию: вода 10 °C, как в программе ─── */
@@ -80,7 +80,9 @@ function speedNotes(mat,dv_mm,v,mode){
  if(!usesSys(mat)) return out;
  const lim=VEL_LIMIT[mode]||VEL_LIMIT.potable; // защита от пустого mode
  if(v>lim[1]) out.push({cls:'warn',text:`Внимание! Скорость больше ${lim[1]} м/с, рекомендуется увеличить диаметр`});
- if(v<lim[0]) out.push({cls:'warn',text:'Малая скорость! Рекомендуется уменьшить диаметр'});
+  // сталь/э-с: в EXE только предупреждение по скорости («Внимание! Скорость больше 3 м/с…» / «…10 м/с…»).
+  // Строка «Малая скорость! Рекомендуется уменьшить диаметр» — чугунная (0x42bc0, FUN_004ae2c0);
+  // на стальной странице её нет (подтверждено 10.10.2026) — она противоречила рекомендации по ряду.
  return out;
 }
 
@@ -263,7 +265,10 @@ function shevCalc(inp){
 
  const q=qToM3s(qraw,inp.qunit);
  const v=velocity(q,dv);
- const {A,e,i}=gradient(mat,inp.wear,v,dv);
+ let A,e,i;
+ if(mat==='steel'||mat==='steel-es'){ // точные формулы EXE: ν входит (агент const-check, 10.10.2026)
+  i=steelI(v,dv/1000,(!isNaN(inp.nu)&&inp.nu>0)?inp.nu:NU_FIX,inp.wear); A=i/(v*v/Math.pow(dv/1000,1.3)); e=1.3;
+ } else { const g=gradient(mat,inp.wear,v,dv,inp.sys); A=g.A; e=g.e; i=g.i; }
  const R=pressure(i,rho), H=head(i,L,k), P=R*L*(1+k);
 
  const lines=[
