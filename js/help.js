@@ -4,11 +4,15 @@
    где h — заголовок (считаемый параметр), s — документ + номер формулы, t — формула в LaTeX,
    step — ключ шага, note — метаданные, p — список параметров; step(kind) — функция страницы,
    возвращающая строку «= <числа> = <результат с единицами>» для этого шага.
-   Если у страницы своей функции нет, используется общая calcStepHtml() из ui.js. */
+   Если у страницы своей функции step нет, строка подстановки не печатается. */
 "use strict";
 
 const HELP_PAGES={};
 function registerHelp(id,page){ HELP_PAGES[id]=page; }
+
+/* Дробь для «печатного» вида формул (офлайн: чистый CSS, без KaTeX/MathJax). Стоит здесь, а не в
+   ui.js, потому что её читатели — только файлы справок js/help/<id>.js (7 страниц из 11). */
+const fr=(n,d)=>`<span class="frac"><span class="fnum">${n}</span><span class="fden">${d}</span></span>`;
 
 /* Текстовые поля (заголовки, цитаты, пометки, расшифровки) печатаются как HTML,
    поэтому LaTeX-записи в них приводятся к HTML одним общим преобразователем. */
@@ -33,7 +37,7 @@ function helpText(s){
    step(kind) может вернуть: {sub,res,note} — подстановка/результат/пометка, ЛИБО строку (старый вид).
    Формат строки один для всех справок: «= <подстановка>… = <b>результат</b> <пометка>». */
 function helpStepHtml(pg,kind){
- let out = pg.step ? pg.step(kind) : (typeof calcStepHtml==="function" ? calcStepHtml(kind) : "");
+ let out = pg.step ? pg.step(kind) : "";
  if(!out) return "";
  if(typeof out==="string") return out;
  let s="";
@@ -67,4 +71,4 @@ function renderCalcHelp(id){
  return h;
 }
 
-if (typeof module!=="undefined" && module.exports){ module.exports={HELP_PAGES,registerHelp,renderCalcHelp,helpStepHtml,helpText}; }
+if (typeof module!=="undefined" && module.exports){ module.exports={HELP_PAGES,registerHelp,renderCalcHelp,helpStepHtml,helpText,fr}; }
