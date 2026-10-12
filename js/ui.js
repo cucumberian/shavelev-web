@@ -26,7 +26,8 @@ function fillModes(keep){
 
 /* Видимость блоков «Трубы» (новые/неновые) и «Режим / теплоноситель» по странице материала.
    Критерий один: блок показываем только там, где его данные участвуют в формулах и где он есть
-   в оригинальном окне (шаблоны форм EXE; см. calc.js — usesSys/usesWear/usesK).
+   в оригинальном окне (шаблоны форм EXE). Карта видимости — декларативно в данных страниц
+   (js/data/<тип>.js → m.ui: sys/wear/cu), читается движком (calc.js — usesSys/usesWear/usesCu/usesK):
     • сталь ВГП (frmtablII11) и электросварная (frmtablII2): Frame4 «Выбор системы» с Option5
       «холодного водоснабжения» / Option6 «горячего водоснабжения» и полем t= °C (Label21),
       Check2 «учесть потери на местные сопротивления» + k → блок активен;
@@ -75,7 +76,7 @@ function applySysVisibility(){
    «шт.», Check14 «другие» + Text17, Label11 «Sx=», Command4 «Сброс»). */
 function applyCopperVisibility(id){
  const m=MATERIALS.find(x=>x.id===id);
- const cu = id==='copper' || id==='pex' || id==='metal-pex';
+ const cu = usesCu(id);   // карта m.ui.cu из данных страниц (copper/pex/metal-pex)
  ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=cu?'':'none');
  // на этих страницах нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
  if(cu){ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none'); }
@@ -329,11 +330,27 @@ function applyMestLimit(){
  const wasOff=cb.dataset.mestOff==='1';
  if(off!==wasOff){
   cb.dataset.mestOff=off?'1':'0';
-  if(off){ cb.dataset.mestRemembered=cb.checked?'1':'0'; cb.checked=false; }   // запомнили, как было
-  else { cb.checked=(cb.dataset.mestRemembered!=='0'); delete cb.dataset.mestRemembered; }
-  cb.disabled=off;
-  if(cb.onchange) cb.onchange();   // режим и k ходят за состоянием галочки (как в программе)
- } else cb.disabled=off;
+  if(off){                                                // уходим в зону dу ≥ 80: помним галочку И значение k
+   cb.dataset.mestRemembered=cb.checked?'1':'0';
+   cb.dataset.mestKPrev=$('k').value;                     // в т.ч. введённый вручную 0 — не подменяем на k режима
+  } else if(cb.dataset.mestRemembered!==undefined){
+   cb.checked=(cb.dataset.mestRemembered!=='0'); delete cb.dataset.mestRemembered;
+   if(cb.dataset.mestKPrev!==undefined){ $('k').value=cb.dataset.mestKPrev; delete cb.dataset.mestKPrev; }
+   // Вернулись из зоны dу ≥ 80 с включённой галочкой, а k пуст — ставим k режима.
+   // Только на самом переходе off→on: подставлять k при каждом вызове нельзя, иначе очищенное
+   // пользователем поле молча заполняется и обходится проверка «Вы не ввели значение коэффициента»
+   // (BSTR 0x047b70; замечание независимой рецензии 11.10.2026).
+   if(cb.checked && $('k').value===''){ const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); }
+  }
+ }
+ cb.disabled=off;
+ if(off){
+  cb.checked=false; $('k').value='0';                     // местные не учитываются
+  $('mode').disabled=true; $('k').disabled=true;
+ } else {
+  const on=cb.checked;
+  $('mode').disabled=!on; $('k').disabled=!on;
+ }
 }
 function updDu(){
  const m=currentMat(), el=$('duLine');
@@ -355,11 +372,6 @@ function numStrict(s){
  s=s.trim().replace(',','.');
  if(!/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s)) return NaN;
  return parseFloat(s);
-}
-function readQ(){
- const q=numStrict($('q').value);
- if(isNaN(q)) return NaN;
- return $('qunit').value==='ls'? q/1000 : q/3600;   // л/с и м³/ч → м³/с
 }
 function curDv(){
  const m=currentMat();
@@ -393,7 +405,7 @@ function curDv(){
  if(m.cls){ // frmtablII3: dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и «неновые» (хвост FUN_004b1b00)
    if($('danother').checked) return numStrict($('dcv').value);
    const du=+$('dsel').value;
-   const t=m.cls[curCls()][du]||[du,0]; // фолбэк как в EXE: нет строки (Б,1000) → dн=dу, S=0 → dp=dу
+   const t=m.cls[curCls()][du]||[du,0]; // страховка на неполную таблицу; у всех классов EXE строки есть (16, включая dу=1000)
    const dv=t[0]-2*t[1];
    return dv-(dv<=300 && document.querySelector('input[name=wear]:checked').value==='old'?1:0);
  }
@@ -425,6 +437,30 @@ function curDv(){
 /* Расчёт: здесь ТОЛЬКО чтение контролов и вывод. Валидация, v, i, R, H, предупреждения и
    строка рекомендации — в calc.js (shevCalc). dpOf(d) остаётся в ui.js, потому что зависит от
    контролов: стенка (газовые/э/с), класс и «неновые» (чугун), SDR (ПЭ). */
+/* Единая точка сборки входа движка: и calc(), и резервная подстановка чисел в справку
+   (calcStepHtml) берут объект отсюда, поэтому «что видит пользователь» и «что считает движок»
+   не разъезжаются. Это не «единственное чтение контролов»: ниже делегируется в curDv(), cuSysVal(),
+   xiTotal(), cuCool(), а calc() дополнительно строит dpOf — осознанно зависимые читатели, их
+   результат обязан совпадать с тем, что вернул readForm(). */
+function readForm(){
+ const m=currentMat();
+ return {
+  mat:m.id,
+  sys:(document.querySelector('input[name=sys]:checked')||{}).value,
+  wear:(document.querySelector('input[name=wear]:checked')||{}).value,
+  dv_mm:curDv(),
+  q:numStrict($('q').value), qunit:$('qunit').value,
+  L:numStrict($('len').value),
+  k:numStrict($('k').value), mest:!!($('chkMest') && $('chkMest').checked),
+  nu:numStrict($('nu').value), rho:numStrict($('rho').value),
+  mode:$('mode').value,
+  selD:m.gas?m.gas.du[$('dsel').value]:+$('dsel').value,
+  // медная страница (frmtablII9): система из Frame2, ξ из Frame6, ν/ρ из Frame5 (или по t из Combo3)
+  cuSys:cuSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
+  cool:cuCool(), cuNu:numStrict($('cunu').value)*1e-6, cuRho:numStrict($('curho').value),
+  pexSp:!!($('pexSp') && $('pexSp').checked), // PEX: по формуле (4) СП вместо кода программы
+ };
+}
 function calc(){
  const out=$('out');
  $('outH').innerHTML='—';
@@ -442,25 +478,10 @@ function calc(){
    return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
  };
  // оригинал перед расчётом проверяет введённый коэффициент (MessageBox «Вы не ввели значение коэффициента», BSTR 0x047b70)
- if(currentMat().usesK!==false && $('chkMest') && $('chkMest').checked && String($('k').value).trim()===''){
+ if(usesK(m.id) && $('chkMest') && $('chkMest').checked && String($('k').value).trim()===''){
   out.innerHTML='<span class="warn">Вы не ввели значение коэффициента</span>'; return; }
- const r=shevCalc({
-   mat:m.id,
-   sys:(document.querySelector('input[name=sys]:checked')||{}).value,
-   wear:document.querySelector('input[name=wear]:checked').value,
-   dv_mm:curDv(),
-   q:numStrict($('q').value), qunit:$('qunit').value,
-   L:numStrict($('len').value),
-   k:numStrict($('k').value), mest:$('chkMest').checked,
-   nu:numStrict($('nu').value), rho:numStrict($('rho').value),
-   mode:$('mode').value,
-   selD:m.gas?m.gas.du[$('dsel').value]:+$('dsel').value,
-   dpOf,
-   // медная страница (frmtablII9): система из Frame2, ξ из Frame6, ν/ρ из Frame5 (или по t из Combo3)
-   cuSys:cuSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
-   cool:cuCool(), cuNu:numStrict($('cunu').value)*1e-6, cuRho:numStrict($('curho').value),
-   pexSp:$('pexSp').checked, // PEX: по формуле (4) СП вместо кода программы
- });
+ const inp=readForm(); inp.dpOf=dpOf;
+ const r=shevCalc(inp);
  if(!r.ok){out.innerHTML=`<span class="warn">${r.error}</span>`;return;}
  $('hLegend').textContent=r.hLegend;
  out.innerHTML=r.lines.join('\n')+'\n'+r.notes.map(n=>`<span class="${n.cls}">${n.text}</span>`).join('\n');
@@ -477,11 +498,15 @@ function helpHtml(){
  const HELP={steel:helpSteel,'steel-es':helpSteel,ci:helpCI,asbes:helpAsbes,plastic:helpPlastic,
   conc:helpConc,grp:helpGrp,glass:helpGlass,copper:helpCopper,pex:helpPex};
  const hf=HELP[currentMat().id]; // диспатч по материалу; для неподтверждённых страниц — пусто, а НЕ стальная справка
- // у PEX формулы ещё не разбиты построчно — показываем шаги расчёта после справки
+ const page=(typeof HELP_PAGES!=='undefined' && HELP_PAGES[m.id])?renderCalcHelp(m.id):'';
+ // Своя справка (js/help/<id>.js → renderCalcHelp) есть у всех 11 страниц — показываем её.
+ // Резервные ветки ниже достижимы только для страницы без файла справки: прежняя справка + шаги PEX
+ // (раньше `inline`/`extra` считались всегда и тут же выбрасывались — 10 лишних вызовов calcStepHtml
+ // на каждый рендер; замечание независимой рецензии 11.10.2026).
+ if(page) return page;
  const inline=m?['dp','re','rek','b','lamSp','i','R','Z','H','P'].map(calcStepHtml).join(''):'';
  const extra=(m&&m.id==='pex')?inline:'';
- const page=(typeof HELP_PAGES!=='undefined' && HELP_PAGES[m.id])?renderCalcHelp(m.id):'';
- return page || ((hf?hf():'')+calcSection()+extra);
+ return (hf?hf():'')+calcSection()+extra;
 }
 function showHelp(){
  const h=$('help');
@@ -682,7 +707,7 @@ function helpPlastic(){
 /* Страница меди ИЛИ PEX: обе пользуются блоками Frame4 «Температура» / Frame5 «Теплоноситель».
    Таблица ν/ρ берётся КОНКРЕТНОЙ страницы: у меди t=90 → 0,36·10⁻⁶ (DAT_00402428 @0x5166da-цепочка),
    у PEX t=90 → 0,32·10⁻⁶ (DAT_00402670 @0x527da9/@0x5281b7) — таблицы различаются на этом шаге. */
-function cuMat(){ const m=currentMat(); return m&&(m.id==='copper'||m.id==='pex'||m.id==='metal-pex')?m:null } // у PEX-AL-PEX свои «Температура» и «Теплоноситель»
+function cuMat(){ const m=currentMat(); return m&&usesCu(m.id)?m:null } // у PEX-AL-PEX свои «Температура» и «Теплоноситель»
 function cuSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
 function cuCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
 /* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
@@ -780,16 +805,18 @@ function calcSection(){ return ''; }
 /* Шаг расчёта: в саму формулу подставляются числа — формула = числа = результат с единицами. */
 function calcStepHtml(kind){
  const m=currentMat(); if(!m || (m.id!=='pex' && m.id!=='metal-pex')) return '';
+ // вход — тот же readForm(), что у расчёта: подстановка справки не может разойтись с движком
+ const inp=readForm();
  // диаметр — как у движка: подставленный программой dв (поле dcv), а не наружный из списка
- const q=numStrict($('q').value), dv=numStrict($('dcv').value), L=numStrict($('len').value);
+ const q=inp.q, dv=inp.dv_mm, L=inp.L;
  if(isNaN(q)||isNaN(dv)||dv<=0||isNaN(L)) return '';
- const sys=cuSysVal(), pexSp=$('pexSp') && $('pexSp').checked;
+ const sys=inp.cuSys, pexSp=inp.pexSp;
  let nu=1.3, rho=1000;
  if(sys!=='cold' && $('cunu') && $('cunu').value!=='') nu=numStrict($('cunu').value);
  if($('curho') && $('curho').value!=='') rho=numStrict($('curho').value);
  if(!(nu>0)) nu=1.3; if(!(rho>0)) rho=1000;
- const nu6=nu*1e-6, xi=xiTotal()||0;
- const d=dv/1000, v=velocity(qToM3s(q,$('qunit').value),dv);
+ const nu6=nu*1e-6, xi=inp.xiSum||0;
+ const d=dv/1000, v=velocity(qToM3s(q,inp.qunit),dv);
  const lg=Math.log10, re=v*d/nu6, rek=500*d/PEX_KE, l37=lg(3.7*d/PEX_KE);
  let b=1+lg(re)/lg(rek); const cap=b>2; if(cap) b=2;
  const lam=pexSp?pexLambdaSP(nu6,v,d):pexLambda(nu6,v,d);
@@ -916,31 +943,42 @@ $('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;
  else { const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); } // включаем — k снова по режиму (0,3 и т. п.)
 }; // как в программе (FUN_00480b10): без местных сопротивлений k блокируется и очищается
 $('nuPreset').onchange=e=>{if(e.target.value){const[a,b]=e.target.value.split('|');$('nu').value=a;$('rho').value=b;}};
-$('mode').onchange=()=>{const kv=K_MODE[$('mode').value];if(kv!==undefined)$('k').value=String(kv);}; // k по режиму, как в программе
+/* k по режиму, как в программе (FUN_00480b10). syncK() — явный вызов из обработчиков;
+   раньше обработчики дёргали $('mode').onchange() друг из друга — скрытая цепочка, её нет. */
+function syncK(){ const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); }
+$('mode').onchange=syncK;
 const T_NU_RHO={40:['0.66e-6','1000'],45:['0.605e-6','1000'],50:['0.55e-6','1000'],55:['0.51e-6','1000'],60:['0.47e-6','1000'],65:['0.44e-6','1000'],70:['0.41e-6','1000'],75:['0.385e-6','1000'],80:['0.36e-6','1000'],85:['0.34e-6','1000'],90:['0.32e-6','1000'],95:['0.30e-6','1000']}; // ν — точная таблица EXE FUN_0047de20 (реверс 10.10.2026), ρ — книжные пресеты
-$('sysCold').onchange=()=>{fillModes(false);$('mode').onchange();
+/* ν/ρ по выбранной t из поля «t = … °C» (ГВС стали); syncSteelT() — явный вызов, не $('tSteel').onchange() */
+function syncSteelT(){ const p=T_NU_RHO[$('tSteel').value]; if(p){ $('nu').value=p[0]; $('rho').value=p[1]; } }
+$('tSteel').onchange=syncSteelT;
+$('sysCold').onchange=()=>{fillModes(false);syncK();
  $('tSteelRow').style.display='none'; $('nuRow').style.display='none'; $('rhoRow').style.display='none'; // в оригинале полей ν/ρ на стальной странице нет
  if(usesSys(currentMat().id)){ $('mestRow').style.display=''; $('modeRow').style.display=''; $('kRow').style.display='';
-  $('chkMest').checked=true; const kv0=K_MODE[$('mode').value]; if(kv0!==undefined) $('k').value=String(kv0); }
+  syncK(); }   // галочку НЕ поднимаем: оригинал сохраняет её состояние при смене системы
+ // (живая проверка 12.10.2026: отмеченная в ГВС галочка остаётся отмеченной и в ХВС, и в ГВС),
+ // а по умолчанию в оригинале она СНЯТА — как и в клоне.
  // холодное водоснабжение: температура/ν блокируются, подставляются ν=0 и ρ=1000 (как в программе;
  // на расчёт ν не влияет — все формулы ν-подставленные, ν=1,3·10⁻⁶ «зашита» в константы 0,684/0,867)
  $('nu').value='1.3e-6';$('nu').disabled=true;$('nuPreset').disabled=true;$('rho').value='1000';
+ applyMestLimit();   // на большом dу галочка местных остаётся погашенной и снятой
 }; // ν входит в формулы стали (ХВС: вода 10 °C)
-$('sysHot').onchange=()=>{fillModes(false);$('mode').onchange();
+$('sysHot').onchange=()=>{fillModes(false);syncK();
  $('nu').disabled=false;$('nuPreset').disabled=false;
- // ГВС стали: в оригинале есть только подписанное поле «t = … °C», местные сопротивления и поля ν/ρ отсутствуют
+ // ГВС стали: в оригинале есть подписанное поле «t = … °C», поля ν/ρ отсутствуют, а блок местных
+ // сопротивлений ОСТАЁТСЯ — гасит его не система, а диаметр (applyMestLimit, dу ≥ 80), одинаково
+ // для ХВС и ГВС (живая проверка 12.10.2026): ГВС dн=60 (dу=50) — галочка есть, k=0,2 по режиму
+ // «подающий/циркуляционный», H=1,33 м; ГВС dн=75,5 (dу=65) — есть; ГВС dн=88,5 (dу=80) — нет.
  if(usesSys(currentMat().id)){ $('tSteelRow').style.display=''; $('nuRow').style.display='none'; $('rhoRow').style.display='none';
-  $('mestRow').style.display='none'; $('modeRow').style.display='none'; $('kRow').style.display='none';
-  $('chkMest').checked=false; $('k').value='0';           // в ГВС местные сопротивления в оригинале отсутствуют
-  if(!$('tSteel').value||$('tSteel').value==='40') $('tSteel').value='60'; $('tSteel').onchange(); } };
-$('tSteel').onchange=()=>{ const p=T_NU_RHO[$('tSteel').value]; if(p){ $('nu').value=p[0]; $('rho').value=p[1]; } };
+  $('mestRow').style.display=''; $('modeRow').style.display=''; $('kRow').style.display='';
+  applyMestLimit();   // на большом dу галочка погашена и снята — в любом режиме водоснабжения
+  if(!$('tSteel').value||$('tSteel').value==='40') $('tSteel').value='60'; syncSteelT(); } };
 $('tSteel').onchange();
 fillModes(false);
 // сталь/э-с: полей ν и ρ в оригинале нет — они скрыты, значения подставляет программа
 // (ХВС: ν=0, ρ=1000; ГВС: по выбранной t из поля «t = … °C»)
 if(usesSys(currentMat().id)){ $('nuRow').style.display='none'; $('rhoRow').style.display='none'; }
 applySysVisibility(); // чугунная страница: скрыть система/режим/местные/k, зафиксировать ν/ρ (t=10°C)
-$('mode').onchange(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
+syncK(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
 fillXiGrid();
 document.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=cuSysSync); // Frame2 Option1–4
 document.querySelectorAll('input[name=cool]').forEach(r=>r.onchange=cuHeatSync);  // Frame5 вода/другой

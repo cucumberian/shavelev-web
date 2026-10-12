@@ -52,14 +52,22 @@ function head(i,L,k){ return i*L*(1+(k||0)) }
 const NU_FIX=1.3e-6, RHO_FIX=1000;
 
 /* ─── какие страницы не используют режим/теплоноситель/местные сопротивления ───
-   usesSys() true только для steel и steel-es (там в окне есть «Выбор системы», t и k).
-   usesWear() — где есть «новые/неновые»: строки «новые»/«неновые» в EXE лежат только в
-   шаблонах frmtablII11 (сталь), frmtablII2 (э/с) и frmtablII3 (чугун). */
+   Декларативная карта видимости блоков лежит в данных страниц (js/data/<тип>.js → m.ui):
+     ui.sys  — в окне есть стальной блок «Режим / теплоноситель» (Система/местные/режим/k):
+               true только у steel и steel-es (frmtablII11/frmtablII2: Frame4 «Выбор системы»,
+               Option5/6, Label21 «t=», Check2 «учесть … местные сопротивления»);
+     ui.wear — в окне есть «новые/неновые»: steel, steel-es, ci (строки EXE 0x62ce6..0x62d28,
+               0x63c53/0x63c7a, 0x6905c/0x69085);
+     ui.cu   — страница со своими рамками «Выбор системы»/«Температура»/«Теплоноситель»/ξ
+               (copper frmtablII9, pex frmtablII10, metal-pex).
+   NO_SYS/NO_WEAR — резервный список для страниц без карты (и эталон для calc_test.js). */
 const NO_SYS=['ci','asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
 const NO_WEAR=['asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
 function matOf(id){ return MATERIALS.find(m=>m.id===id) }
-function usesSys(mat){ return !NO_SYS.includes(mat) }
-function usesWear(mat){ return !NO_WEAR.includes(mat) }
+function uiFlag(mat,key,fallback){ const m=matOf(mat); return (m&&m.ui&&key in m.ui)?!!m.ui[key]:fallback }
+function usesSys(mat){ return uiFlag(mat,'sys',!NO_SYS.includes(mat)) }
+function usesWear(mat){ return uiFlag(mat,'wear',!NO_WEAR.includes(mat)) }
+function usesCu(mat){ return uiFlag(mat,'cu',mat==='copper'||mat==='pex'||mat==='metal-pex') }
 function usesK(mat){ return usesSys(mat) }   // k ≡ 0 и H = i·L там, где нет местных сопротивлений
 
 /* ─── предупреждения по скорости ───
@@ -294,5 +302,5 @@ function shevCalc(inp){
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
  module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,copperCalc,pexCalc,
-   NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesK,ciLimits,speedNotes,recommendation,shevCalc};
+   NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesCu,usesK,ciLimits,speedNotes,recommendation,shevCalc};
 }
