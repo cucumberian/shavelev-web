@@ -323,26 +323,35 @@ function updDv(){
    программа отключает галочку «учесть потери на местные сопротивления» — местные не учитываются
    (живое наблюдение 10.10.2026; на малых диаметрах галочка доступна). */
 function applyMestLimit(){
- const m=currentMat(); if(!m||!m.gas) return;            // только сталь ВГП («газовые»)
+ const m=currentMat(); if(!m) return;
  const cb=$('chkMest'); if(!cb) return;
- const dy=m.gas.du[$('dsel').value];
- const off=(dy!==undefined && dy>=80);                   // dу ≥ 80 ⟺ dн ≥ 88,5
+ // Порог — по диаметру, и он разный на двух стальных страницах (живые пробы 12.10.2026):
+ // ВГП frmtablII11: dу ≥ 80 (dн ≥ 88,5); электросварные frmtablII2: dн ≥ 88 (dн=76 — галочка
+ // есть, dн=88 и 89 — нет). Правило НЕ по расчётному dp: при dн=89, S=5 (dp=79) галочки тоже нет.
+ let off;
+ if(m.gas){ const dy=m.gas.du[$('dsel').value]; off=(dy!==undefined && dy>=80); }
+ else if(m.mestDn!==undefined){ const dn=parseFloat($('dsel').value); off=(!isNaN(dn) && dn>=m.mestDn); }
+ else return;
  const wasOff=cb.dataset.mestOff==='1';
  if(off!==wasOff){
   cb.dataset.mestOff=off?'1':'0';
-  if(off){                                                // уходим в зону dу ≥ 80: помним галочку И значение k
+  if(off){                                                // уходим в зону порога: помним галочку И значение k
    cb.dataset.mestRemembered=cb.checked?'1':'0';
    cb.dataset.mestKPrev=$('k').value;                     // в т.ч. введённый вручную 0 — не подменяем на k режима
   } else if(cb.dataset.mestRemembered!==undefined){
    cb.checked=(cb.dataset.mestRemembered!=='0'); delete cb.dataset.mestRemembered;
    if(cb.dataset.mestKPrev!==undefined){ $('k').value=cb.dataset.mestKPrev; delete cb.dataset.mestKPrev; }
-   // Вернулись из зоны dу ≥ 80 с включённой галочкой, а k пуст — ставим k режима.
+   // Вернулись из зоны порога с включённой галочкой, а k пуст — ставим k режима.
    // Только на самом переходе off→on: подставлять k при каждом вызове нельзя, иначе очищенное
    // пользователем поле молча заполняется и обходится проверка «Вы не ввели значение коэффициента»
    // (BSTR 0x047b70; замечание независимой рецензии 11.10.2026).
    if(cb.checked && $('k').value===''){ const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); }
   }
  }
+ // В оригинале строки не затемняются, а ИСЧЕЗАЮТ (живые скрины dн=88,5 ВГП и dн=88 э/с:
+ // в рамке «Потери напора на участке, м» остаётся только «Длина участка L=»). Флаги disabled
+ // держим теми же — на них опирается остальной код и тесты.
+ ['mestRow','modeRow','kRow'].forEach(r=>{ const e=$(r); if(e) e.style.display=off?'none':''; });
  cb.disabled=off;
  if(off){
   cb.checked=false; $('k').value='0';                     // местные не учитываются
@@ -355,7 +364,7 @@ function applyMestLimit(){
 function updDu(){
  const m=currentMat(), el=$('duLine');
  el.parentElement.style.display=m.gas?'':'none'; // у прочих материалов строки dу нет
- if(!m.gas){el.textContent='';return;}
+ if(!m.gas){el.textContent=''; if(m.mestDn!==undefined) applyMestLimit(); return;}
  const dn=$('dsel').value, dy=m.gas.du[dn];
  if(dy===undefined){el.textContent='';return;}
  const w=m.gas.s[dn]||[], s=parseFloat($('tsel').value);
@@ -393,14 +402,17 @@ function curDv(){
    return (isNaN(dn)||isNaN(s))?NaN:dn-2*s;
   }
  if(m.gas||m.wall){ // frmtablII1/2: dн→S→dp = dн − 2s − 1 (коррозия);
-                    // для dн ≥ 300 мм уменьшение не учитывается (кн. Шевелевых, печатная стр. 6)
+   // порога «dн ≥ 300 мм» в программе НЕТ (живые точки 12.10.2026, электросварные:
+   // dн=325 S=4 → dp=316; dн=426 S=4 → 417; dн=530 S=20 → 489; dн=1120 S=10 → 1099,
+   // а при «новые» там же → 1100). Книжное «при диаметре более 300 мм единицу можно не
+   // отнимать» (кн. Шевелевых, печатная стр. 6) программой не реализовано.
    if($('danother').checked) return numStrict($('dcv').value);
    const dn=parseFloat($('dsel').value), s=parseFloat($('tsel').value);
    if(isNaN(dn)||isNaN(s)) return NaN;
    // «−1 мм» — только у «неновых» (живые точки 10.10.2026: «новые» dн=26,8 S=2,35 → dв=22,1;
    // «неновые» dн=26,8 S=2,5 → dв=20,8; dн=114 S=4,5 → dв=104)
    const oldWear=document.querySelector('input[name=wear]:checked').value==='old';
-   return dn-2*s-((oldWear&&dn<300)?1:0);
+   return dn-2*s-(oldWear?1:0);
  }
  if(m.cls){ // frmtablII3: dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и «неновые» (хвост FUN_004b1b00)
    if($('danother').checked) return numStrict($('dcv').value);
@@ -468,9 +480,15 @@ function calc(){
  const dpOf=(d)=>{
    if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
      const dn=+it[0],s=parseFloat($('tsel').value);if(isNaN(s))return NaN;
-     // «−1 мм» (коррозия/отложения) — только у «неновых» и при dн<300 (живая точка 10.10.2026:
-     // «новые» dн=26,8 S=2,35 → dв=22,1; «неновые» dн=26,8 S=2,5 → dв=20,8)
-     return dn-2*s-((document.querySelector('input[name=wear]:checked').value==='old'&&dn<300)?1:0);}
+     // Тот же закон, что в curDv(): «−1 мм» (коррозия/отложения) только у «неновых», порога
+     // «dн ≥ 300 мм» в программе нет (живые точки 12.10.2026, электросварные: dн=325 S=4 → 316;
+     // dн=1120 S=10 → 1099, «новые» → 1100). У ВГП максимальный dн=165, так что там правка
+     // ничего и не меняла. Живые точки 10.10.2026: «новые» dн=26,8 S=2,35 → dв=22,1;
+     // «неновые» dн=26,8 S=2,5 → dв=20,8.
+     return dn-2*s-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
+   if(m.wall){const dn=+d,s=parseFloat($('tsel').value);if(isNaN(dn)||isNaN(s))return NaN;
+     // электросварные (frmtablII2): тот же dр = dн − 2S − 1 при любом диаметре
+     return dn-2*s-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
      return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}

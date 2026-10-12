@@ -39,7 +39,7 @@ function steelHelpIntro(id){
   ' <div class="mrow"><span class="mlab">для новых стальных труб:</span><span>λ = '+fr('0,312','<i>d</i><sub>p</sub><sup>0,226</sup>')+' · <span class="grp">(1,9·10<sup>−6</sup> + '+fr('<span class="nu">ν</span>','<i>v</i>')+')<sup>0,226</sup></span></span></div>',
   ' <div class="mrow"><span class="mlab">для неновых стальных труб при <i>v</i>/<span class="nu">ν</span> ≥ 9,2·10<sup>5</sup> 1/м:</span><span>λ = '+fr('0,021','<i>d</i><sub>p</sub><sup>0,3</sup>')+'</span></div>',
   ' <div class="mrow"><span class="mlab">то же при <i>v</i>/<span class="nu">ν</span> &lt; 9,2·10<sup>5</sup> 1/м:</span><span>λ = '+fr('<span class="grp">(1,5·10<sup>−6</sup> + '+fr('<span class="nu">ν</span>','<i>v</i>')+')</span><sup>0,3</sup>','<i>d</i><sub>p</sub><sup>0,3</sup>')+'</span></div>',
-  ' <div class="mrow"><span class="mlab">расчётный внутренний диаметр:</span><span><i>d</i><sub>p</sub> = <i>d</i><sub>н</sub> − 2<i>s</i> − 1'+(gas?'':' (при <i>d</i><sub>н</sub> &lt; 300 мм)')+'</span></div>',
+  ' <div class="mrow"><span class="mlab">расчётный внутренний диаметр:</span><span><i>d</i><sub>p</sub> = <i>d</i><sub>н</sub> − 2<i>s</i> − 1</span></div>',
   ' <div class="mdef"><b>где</b>',
   '  <div class="drow"><span class="dsym"><i>d</i><sub>p</sub></span><span>— расчётный внутренний диаметр, м;</span></div>',
   '  <div class="drow"><span class="dsym"><i>d</i><sub>н</sub></span><span>— наружный диаметр трубы, мм;</span></div>',
@@ -50,7 +50,7 @@ function steelHelpIntro(id){
   '  <div class="drow"><span class="dsym"><span class="nu">ν</span></span><span>— кинематическая вязкость воды, м²/с;</span></div>',
   '  <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,81 м/с² (2g = 19,62).</span></div>',
   ' </div>',
-  ' <div class="hint">1 мм в формуле d<sub>p</sub> — толщина слоя коррозии и отложений на стенках; для труб диаметром 300 мм и более уменьшение практического значения не имеет и не учитывается (кн., стр. 6).</div>',
+  ' <div class="hint">1 мм в формуле d<sub>p</sub> — толщина слоя коррозии и отложений на стенках; вычитается у «неновых» труб при любом диаметре. В книге (стр. 6) для диаметров 300 мм и более советуют его не учитывать, но программа вычитает 1 мм и там — живые точки: d<sub>н</sub>=325, S=4 → d<sub>р</sub>=316; d<sub>н</sub>=1120, S=10 → 1099 (а у «новых» там же 1100).</div>',
   '</div>'
  ];
 }
@@ -72,11 +72,11 @@ function steelHelpFormulas(id){
       '1 л/с = 10<sup>−3</sup> м³/с; 1 м³/ч = 1/3600 м³/с (в программе — переключатель «л/сек / м³/ч»)']},
 
   {h:'d<sub>p</sub> — расчётный внутренний диаметр, мм', s:'кн. Шевелевых 1984, табл. 1 и стр. 6; '+(gas?'ГОСТ 3262-75':'ГОСТ 10704-91'),
-   t: gas? 'd_p=d_{\\text{н}}-2S-1' : 'd_p=d_{\\text{н}}-2S-1\\;(d_{\\text{н}}<300\\;\\text{мм});\\; d_p=d_{\\text{н}}-2S\\;(d_{\\text{н}}\\ge300\\;\\text{мм})',
+   t: 'd_p=d_{\\text{н}}-2S-1',
    step:'dp',
    p:['d<sub>н</sub> — наружный диаметр трубы, мм ('+(gas?'ряд ГОСТ 3262-75 в списке страницы':'ряд ГОСТ 10704-91 в списке страницы')+')',
       'S — толщина стенки, мм (у газовых — связанный список по d<sub>н</sub>; «обыкновенная» стенка даёт книжный d<sub>в</sub>)',
-      '1 мм — коррозия и отложения (кн., стр. 6): для труб менее 300 мм; при d<sub>н</sub> ≥ 300 мм не вычитается',
+      '1 мм — коррозия и отложения (кн., стр. 6); программа вычитает его у «неновых» труб при любом диаметре',
       'при включённом «другой» d<sub>p</sub> вводится вручную']},
 
   {h:'v — средняя скорость потока, м/с', s:'программа «Таблицы Шевелева» (площадь сечения ω = π·d<sub>p</sub>²/4)',
@@ -164,10 +164,8 @@ function steelHelpStep(kind,id){
   case 'v': return N('\\frac{'+f(st.qm3,6)+'\\cdot 4}{\\pi\\cdot '+f(d,5)+'^2}', f(v,3)+' м/с');
   case 'dp': {
    if(st.manual) return N(f(st.dv,2), f(st.dv,2)+' мм <span class="fParam">ручной ввод (флажок «другой»)</span>');
-   const minus=gas||(st.dn<300);
-   const sub=minus? ('d_p='+f(st.dn,2)+'-2\\cdot '+f(st.S,2)+'-1')
-                  : ('d_p='+f(st.dn,2)+'-2\\cdot '+f(st.S,2));
-   return N(sub, f(st.dv,2)+' мм'+(minus?'':' <span class="fParam">при d_{\\text{н}} ≥ 300 мм 1 мм не вычитается</span>'));
+   const sub='d_p='+f(st.dn,2)+'-2\\cdot '+f(st.S,2)+'-1';
+   return N(sub, f(st.dv,2)+' мм');
   }
   case 'i_new': return N('\\frac{'+f(st.lam,8)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,81\\cdot '+f(d,5)+'}', iRes);
   case 'i_hi': return N('\\frac{0,021}{19,62}\\cdot\\frac{'+f(v,3)+'^2}{'+f(d,5)+'^{1,3}}', iRes);
