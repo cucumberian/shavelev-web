@@ -414,12 +414,17 @@ function curDv(){
    const oldWear=document.querySelector('input[name=wear]:checked').value==='old';
    return dn-2*s-(oldWear?1:0);
  }
- if(m.cls){ // frmtablII3: dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и «неновые» (хвост FUN_004b1b00)
+ if(m.cls){ // frmtablII3 (чугун): dв=dн−2S из таблицы класса; dp=dв−1 у «неновых» при ЛЮБОМ dу
    if($('danother').checked) return numStrict($('dcv').value);
    const du=+$('dsel').value;
    const t=m.cls[curCls()][du]||[du,0]; // страховка на неполную таблицу; у всех классов EXE строки есть (16, включая dу=1000)
    const dv=t[0]-2*t[1];
-   return dv-(dv<=300 && document.querySelector('input[name=wear]:checked').value==='old'?1:0);
+   // Порога «dв ≤ 300» в программе НЕТ (живые точки 13.10.2026, 20 пар «новые/неновые»: dв=304,4
+   // →303,4; 503,6→502,6; 799,8→798,8; 803,6→802,6; 1003→1002; 994→993). Прежнее условие dv<=300
+   // выросло из строки VarCmpLe(…,300) в декомпиляции — это путаница Ghidra со стековыми слотами:
+   // в FUN_004b1b00 48 Variant-пар = ровно 48 толщин, ни одной «круглой» константы там нет.
+   // То же правило, что на обеих стальных страницах; см. ../AGENTS.md (раздел про чугун).
+   return dv-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);
  }
  if(m.id==='asbes'){ // frmtablII4: dв из таблицы (ВТ,тип,dу); «Другой» — ручной ввод
    if($('danother').checked) return numStrict($('dcv').value);
@@ -491,7 +496,8 @@ function calc(){
      // электросварные (frmtablII2): тот же dр = dн − 2S − 1 при любом диаметре
      return dn-2*s-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
-     return dv-(dv<=300&&document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
+     // чугун: dр = dв − 1 у «неновых» при любом диаметре — то же правило, что в curDv()
+     return dv-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
    if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
    if(m.dvMap){const x=m.dvMap[d];return x===undefined?NaN:x;}
    return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
@@ -637,7 +643,7 @@ document.querySelectorAll('input[name=sdr]').forEach(r=>r.onchange=fillDiameters
 document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.onchange=fillDiameters); // PEX: серия SDR → список dн и dв
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();}; // как в программе: при «другой» dp-инпут редактируем, блок dу/классов/dн-S-dв блокируется
-document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм только у «неновых» (VarCmpLe(dв,300) And Option1)
+document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм у «неновых» при любом dу (живые точки 13.10.2026)
 $('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;
  if(!on){ $('k').value='0'; }                                 // 10.10.2026: не оставляем пусто — 0 (иначе подстановка в справке вырождается в NaN)
  else { const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); } // включаем — k снова по режиму (0,3 и т. п.)
