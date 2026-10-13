@@ -123,33 +123,37 @@ function pexLambdaSP(nu,v,d){
    книга на стр. 4 пишет ту же границу через v/d_p, опечатка «10⁶» встречалась в прежних записях):
    мало → (5) i = (k_э + ν/v)^0,3/d^0,3·v²/(2g·d);  много → (6) i = (0,021/(2g))·v²/d^1,3. */
 const STEEL_KE_NEW=1.9e-6, STEEL_KE_OLD=1.5e-6, STEEL_SEL=9.2e5; // EXE: v/ν ≥ 9,2·10⁵ → (6) (трассировка 10.10.2026)
+/* Возвращает {i, law}, где law — имя применённой формулы ('steelNew'|'oldA'|'oldB'). По нему
+   результат объясняется агенту (карта текстов — FORMULA_TEXT в webmcp.js). Имя знает ТОЛЬКО
+   формула: пока знание о ветке жило ещё и в webmcp.js, «какой формулой посчитано» надо было бы
+   угадывать в двух местах — ровно тот класс расхождения, из-за которого уже выносили закон dв. */
 function steelI(v,d,nu,wear){
  const n=(nu>0)?nu:1.3e-6;
- if(wear==='new') return 0.312*Math.pow(STEEL_KE_NEW+n/v,0.226)/Math.pow(d,0.226)*v*v/(2*G*d);
- if(v/n < STEEL_SEL) return Math.pow(STEEL_KE_OLD+n/v,0.3)/Math.pow(d,0.3)*v*v/(2*G*d);
- return (0.021/G2)*v*v/Math.pow(d,1.3);
+ if(wear==='new') return {law:'steelNew', i:0.312*Math.pow(STEEL_KE_NEW+n/v,0.226)/Math.pow(d,0.226)*v*v/(2*G*d)};
+ if(v/n < STEEL_SEL) return {law:'oldB', i:Math.pow(STEEL_KE_OLD+n/v,0.3)/Math.pow(d,0.3)*v*v/(2*G*d)};
+ return {law:'oldA', i:(0.021/G2)*v*v/Math.pow(d,1.3)};
 }
 function iCalc(wear, mat, v, d, sys){
   if(mat==='steel'||mat==='steel-es'){
-    if(wear==='new') return {A:F.newSteel(v), e:1.226};
+    if(wear==='new') return {law:'steelNew', A:F.newSteel(v), e:1.226};
     // поправка (7) (1+0,867/v)^0,3 применяется только в ХВС: живая точка 10.10.2026 — ГВС t=60, dв=91,3, Q=3 л/с
     // даёт 1000i=5,048 = формула (6), а то же v в ХВС → 5,916 = формула (7)
-    if(sys==='hot') return {A:F.oldA(), e:1.3};
-    return v>=1.2 ? {A:F.oldA(), e:1.3} : {A:F.oldB(v), e:1.3};
+    if(sys==='hot') return {law:'oldA', A:F.oldA(), e:1.3};
+    return v>=1.2 ? {law:'oldA', A:F.oldA(), e:1.3} : {law:'oldB', A:F.oldB(v), e:1.3};
   }
   if(mat==='ci') {
-    if(wear==='new') return {A:F.newCI(v), e:1.284};
+    if(wear==='new') return {law:'ciNew', A:F.newCI(v), e:1.284};
     // EXE (FUN_004ae2c0): (6) хранит 0,00107 (@0x4aee17), порог v ≥ 1,2 (@0x4aedac)
-    return v>=1.2 ? {A:0.00107, e:1.3} : {A:F.oldB(v), e:1.3};
+    return v>=1.2 ? {law:'oldA', A:0.00107, e:1.3} : {law:'oldB', A:F.oldB(v), e:1.3};
   }
-  if(mat==='asbes')   return {A:F.asbes(v),  e:1.190};
-  if(mat==='conc')    return {A:F.conc(v),   e:1.190};
-  if(mat==='plastic'||mat==='pex'||mat==='metal-pex'||mat==='pe100') return {A:F.plastic(v), e:1.226};
+  if(mat==='asbes')   return {law:'asbes',   A:F.asbes(v),  e:1.190};
+  if(mat==='conc')    return {law:'conc',    A:F.conc(v),   e:1.190};
+  if(mat==='plastic'||mat==='pex'||mat==='metal-pex'||mat==='pe100') return {law:'plastic', A:F.plastic(v), e:1.226};
   // pe100 — та же полиэтиленовая формула (8) книги Шевелевых, что у страницы ГОСТ 18599-2001:
   // ГОСТ Р 70628.2-2023 нормирует только сортамент, гидравлики в нём нет вовсе.
-  if(mat==='grp')     return {A:F.grp(v,d),  e:1};      // λ=0,0146(v·dp)^−0,226; i=λ·v²/(2g·dp)
-  if(mat==='glass')   return {A:F.glass(v),  e:1.226};
-  return {A:F.oldA(), e:1.3};
+  if(mat==='grp')     return {law:'grp',     A:F.grp(v,d),  e:1};    // λ=0,0146(v·dp)^−0,226; i=λ·v²/(2g·dp)
+  if(mat==='glass')   return {law:'glass',   A:F.glass(v),  e:1.226};
+  return {law:'oldA', A:F.oldA(), e:1.3};
 }
 
 // экспорт для node-тестов (в браузере window есть, в node — global)

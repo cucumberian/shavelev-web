@@ -68,6 +68,9 @@ function setPipeClass(c){
 }
 function setDiameter(dv){
   const m=currentMat();
+  // выбор из списка и ручной dв взаимоисключающи: в UI при включённой галке «другой» список погашен,
+  // иначе осталось бы поле dв от прежнего материала. Галочку снимаем тем же состоянием, что и список.
+  if($('danother').checked){ $('danother').checked=false; applyClsState(); }
   const opt=[...$('dsel').options].find(o=>parseFloat(o.value)===dv);
   if(opt){ $('dsel').value=opt.value; $('dsel').onchange(); return; }
   // для материалов с dв≠d: пользователь мыслит dу — ищем индекс в m.d
@@ -84,6 +87,20 @@ function setWall(s){
   const opt=[...$('tsel').options].find(o=>parseFloat(o.value)===s);
   if(!opt) throw new Error('толщина стенки '+s+' недоступна; доступны: '+[...$('tsel').options].map(o=>o.value).join(', '));
   $('tsel').value=opt.value; $('tsel').onchange();
+}
+/* dв напрямую (dv_mm) — тем же путём, каким его задаёт человек: галочка «другой» (page.gated) →
+   список гаснут, поле dв открывается и в него пишется число. Так расчёт идёт РОВНО по запрошенному
+   диаметру. Страницы без ручного dв (сталь и э/с — dв=dн−2s, чугун — из таблицы класса, а/ц и ж/б —
+   dв=dу) его не отпускают: там вместо dv_mm задают diameter_mm и толщину/класс/тип. */
+function setManualDv(v){
+  const m=currentMat();
+  if(!(v>0)) throw new Error('dv_mm должен быть > 0');
+  if(!m.page.gated)
+    throw new Error('на странице '+m.id+' ручного dв нет: он берётся из сортамента. Задай diameter_mm'
+      +((m.gas||m.wall)?' вместе с wall_mm':(m.cls?' вместе с pipe_class':(m.id==='asbes'?' вместе с vt и tip':''))));
+  $('danother').checked=true; applyClsState();
+  $('dcv').value=String(v);
+  if($('dcv').onchange) $('dcv').onchange();
 }
 /* Серия труб. Три страницы, три группы радио: пластик — 'sdr' (доступность по марке 'pe'),
    ПЭ 100 — 'pn' (кнопки собирает fillPnRadios, он же пересобирает группу с dropRad), PEX — 'pexsdr'.
@@ -145,16 +162,12 @@ function defState(m){
   return {};
 }
 const dns=(m,st)=>(m.page.rows(st)||[]).map(r=>r[0]);
-/* Серии труб — из тех же данных: ПЭ 100 отдаёт кнопки PN (page.pnList), пластик — марки и доступные
-   каждой марке серии (page.peOrder + матрица m.pe), PEX — свои пять серий (m.series). */
-function seriesInfo(m){
-  if(m.pe100) return m.page.pnList().map(({sid,label})=>({id:sid,label,dn:dns(m,{sdr100:sid})}));
-  if(m.pe){
-    return Object.keys(m.pe).map(mark=>({mark,
-      series:m.page.peOrder.filter(s=>m.pe[mark][s]).map(s=>({id:s,label:'SDR '+s,dn:dns(m,{pe:mark,sdr:s})}))}));
-  }
-  if(m.series) return m.series.map(s=>({id:s.id,label:s.cap,dn:dns(m,{series:s.id})}));
-  return undefined;
+
+/* Предел скорости — ровно тот, по которому speedNotes в js/calc.js решает, писать ли
+   предупреждение: чугун (свой ряд по dв), иначе страницы со стальным блоком режимов; у остальных
+   блока нет и в оригинале предупреждений нет (FUN_0050a140, FUN_0050daf0) → null. */
+function vLimit(m,inp,dv_mm){
+  return m.cls?ciLimits(dv_mm):(usesSys(m.id)?(VEL_LIMIT[inp.mode]||VEL_LIMIT.potable):null);
 }
 
 /* Эхо входов, числа результата и машинный вердикт — из lastCalc (js/ui.js calc()), то есть из движка
@@ -169,17 +182,14 @@ function echo(){
   const REC=/экономически обосновано|рекомендуется использовать трубу/;
   const rec=(r.notes||[]).find(n=>REC.test(n.text));
   const mm=t=>{const x=t&&t.match(/(\d+(?:,\d+)?)\s*мм/); return x?parseFloat(x[1].replace(',','.')):null;};
-  // Предел скорости — ровно тот, по которому speedNotes решает, писать ли строку-предупреждение:
-  // чугун (свой ряд по dв), иначе страницы со стальным блоком режимов; у остальных блока нет и в
-  // оригинале предупреждений нет (FUN_0050a140 стеклопластик, FUN_0050daf0 стекло) → lim=null.
-  const lim=m.cls?ciLimits(r.dv_mm):(usesSys(m.id)?(VEL_LIMIT[inp.mode]||VEL_LIMIT.potable):null);
+  const lim=vLimit(m,inp,r.dv_mm);
   return {
     // inputs = ровно то, чем считал движок (inp) + серия под именем параметра shev-configure.
     // Остальное состояние страницы (cls/vt/tip чужих страниц) сюда не тащим — оно не на что не влияло.
     inputs:Object.assign({},inp,{pe:m.pe?st.pe:undefined,
       sdr:m.pe100?st.sdr100:(m.pe?st.sdr:undefined), series:m.series?st.series:undefined}),
     result:{v:r.v,i_m_per_m:r.i,i1000_mm_per_m:r.i1000,R:r.R,H:r.H,dP:r.P,k:r.k,A:r.A,e:r.e,dv:r.dv_mm,L:r.L,rho:r.rho,q:r.q,
-      method:methodOf(inp,r,m)},
+      law:r.law, method:FORMULA_TEXT[r.law]},
     verdict:{
       v_limit:lim?{min:lim[0],max:lim[1]}:undefined,
       v_ok:lim? (r.v>=lim[0]&&r.v<=lim[1]) : undefined,
@@ -192,49 +202,31 @@ function echo(){
 }
 
 /* Тексты формул — ОДИН текст на двух потребителей: карта для shev-get-formulas и поле method
-   результата shev-calculate (какая формула фактически применена к этому расчёту) — чтобы агент
+   результата shev-losses (какая формула фактически применена к этому расчёту) — чтобы агент
    объяснил результат пользователю без второго вызова. Источник значений — js/formulas.js. */
-const MODEL_TEXT='i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б, стеклопластика и стекла H=i·L. Медь (СП 40-108-2004) — другие формулы, местные сопротивления не через k: H=i·L+V²Σξ/(2g), ΔP=R·L+Z. g=9.80665 — одно на всю программу, 2g=19.6133 (в оригинале было 9,80665 и 9,81, см. G в formulas.js)';
-const FORMULA_TEXT=  {
-          steel_new:'λ=0.0159·(1+0.684/v)^0.226/d^0.226',
-          ci_new:'λ=0.0144·(1+2.36/v)^0.284/d^0.284',
-          old_v_ge_1_2:'A=0.00107; e=1.3',
-          old_v_lt_1_2:'A=0.000912·(1+0.867/v)^0.3; e=1.3',
-          asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19',
-          conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19',
-          plastic_pex:'i=0.000685·v^1.774/dp^1.226',
-          glass:'i=0.000745·v^1.774/dp^1.226',
-          grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/(2g), e=1) — СП 40-104-2001',
-          copper_cold:'СП 40-108-2004 формула (2): i=0,0161·ν^0,25·V^1,75/d^1,25 — холодное водоснабжение и циркуляционные линии ГВС',
-          copper_supply:'СП 40-108-2004 формула (3): i=0,051·((6,52·lg d+lg(Vd/ν))/(115·lg²d)+(0,66·lg d+0,1·lg(Vd/ν))/(lg(Vd/ν)·lg d))·V²/d — подающие линии ГВС',
-          copper_heating:'СП 40-108-2004 формулы (5)–(9): R=λ·V²/(2d)·10³ Па/м; √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Kз)/(lg Re−1)]/lg(3,7d/Kз); Re_кз=500d/Kз; b=1+lg Re/lg Re_кз; Kз=10⁻⁵ (трубы медные)',
-          copper_local:'СП 40-108-2004 п.3.4.4: ΔP=R·L+Z, Z=0,5·ρ·V²·Σξ; H=i·L+V²Σξ/(2g); ξ — Приложение А (отвод 90° 0,5 … калач 0,7)',
+const MODEL_TEXT='i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б, стеклопластика и стекла H=i·L. Медь (СП 40-108-2004) — другие формулы, местные сопротивления не через k: H=i·L+V²Σξ/(2g), ΔP=R·L+Z. g=9.80665 — одно на всю программу, 2g=19.6133 (в оригинале было 9,80665 и 9,81, см. G в formulas.js). ВНИМАНИЕ, ЕДИНИЦЫ И A: во всех формулах d (он же dp, он же dв) — в МЕТРАХ, а результат i печатается в мм/м (=1000i), R в Па/м; A в ответе shev-losses — коэффициент ПРИ ТЕКУЩЕЙ скорости v и пересчитывается по ней (у полиэтилена A=0,000685·v^−0,226, т.е. закон не чистый A·v²/d^e), поэтому при другой скорости A из ответа не годится — считай по строке method';
+/* Ключи — ИМЕНА ФОРМУЛ, которые возвращает сам движок (law в iCalc/steelI/page.loss):
+   агент получает id и текст одного и того же объекта, а webmcp больше не решает, чем посчитано. */
+const FORMULA_TEXT={
+          steelNew:'сталь/э/с «новые»: λ=0.0159·(1+0,684/v)^0.226/d^0.226; i=λ·v²/(2g·d), d — в метрах',
+          ciNew:'чугун «новые»: λ=0.0144·(1+2,36/v)^0.284/d^0.284; i=λ·v²/(2g·d), d — в метрах',
+          oldA:'кн. Шевелевы, формула (6): A=0.00107; e=1.3 — стальные неновые при v/ν ≥ 9,2·10⁵, чугунные неновые при v ≥ 1,2 и любая сталь в ГВС',
+          oldB:'кн. Шевелевы, формула (7) (поправка на отложения): A=0.000912·(1+0,867/v)^0.3; e=1.3 — при v/ν < 9,2·10⁵ (сталь ХВС) и v < 1,2 (чугун)',
+          asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19, d — в метрах',
+          conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19, d — в метрах',
+          plastic:'i=0.000685·v^1.774/dp^1.226, dp — в метрах',
+          glass:'i=0.000745·v^1.774/dp^1.226, dp — в метрах',
+          grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/(2g), e=1) — СП 40-104-2001, dp в метрах',
+          cu2:'СП 40-108-2004 формула (2): i=0,0161·ν^0,25·V^1,75/d^1,25 — холодное водоснабжение и циркуляционные линии ГВС',
+          cu3:'СП 40-108-2004 формула (3): i=0,051·((6,52·lg d+lg(Vd/ν))/(115·lg²d)+(0,66·lg d+0,1·lg(Vd/ν))/(lg(Vd/ν)·lg d))·V²/d — подающие линии ГВС',
+          cu5:'СП 40-108-2004 формулы (5)–(9): R=λ·V²/(2d)·10³ Па/м; √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Kз)/(lg Re−1)]/lg(3,7d/Kз); Re_кз=500d/Kз; b=1+lg Re/lg Re_кз; Kз=10⁻⁵ (трубы медные)',
+          cu_local:'СП 40-108-2004 п.3.4.4: ΔP=R·L+Z, Z=0,5·ρ·V²·Σξ; H=i·L+V²Σξ/(2g); ξ — Приложение А (отвод 90° 0,5 … калач 0,7)',
         pex:'СП 41-109-2005 п.3.5 — вариант программы (calc FUN_00526810): √λ=0,5·[b/2+1,312(2−b)]/(lg Re_φ−1); Re_φ=dV/ν_t, Re_кз=500d/Кэ, b=1+lgRe_φ/lgRe_кз (b≤2), Кэ=1,0·10⁻⁶ м; i=λ·V²/(2g·d). Множитель lg(3,7d/Кэ) в оригинале сокращается — см. pexLambda в js/formulas.js',
-        pex_sp:'тот же λ, но по формуле (4) СП 41-109-2005 / (3) СП 40-102-2000 — галка «считать по формуле (4) СП»: √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Кэ)/(lg Re−1)]/lg(3,7d/Кэ)'
+        pexSP:'тот же λ, но по формуле (4) СП 41-109-2005 / (3) СП 40-102-2000 — галка «считать по формуле (4) СП»: √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Кэ)/(lg Re−1)]/lg(3,7d/Кэ)'
   };
 
-/* Какая формула ФАКТИЧЕСКИ применена к этому расчёту — те же ветки, что в iCalc/lossesSP
-   (js/formulas.js): сталь и э/с — по новым/неновым, у неновых ветка по v (и ГВС всегда (6));
-   чугун — порог v ≥ 1,2; СП-семейство (медь/PEX/PEX-AL-PEX) — по системе и по галке «по (4) СП».
-   Тексты берутся из той же карты FORMULA_TEXT, что отдаёт shev-get-formulas. */
-function methodOf(inp,r,m){
-  const id=m.id;
-  if(id==='copper')
-    return inp.cuSys==='supply'?FORMULA_TEXT.copper_supply
-        :inp.cuSys==='heat'?FORMULA_TEXT.copper_heating:FORMULA_TEXT.copper_cold;
-  if(id==='pex'||id==='metal-pex') return inp.pexSp?FORMULA_TEXT.pex_sp:FORMULA_TEXT.pex;
-  if(id==='grp')   return FORMULA_TEXT.grp;
-  if(id==='glass') return FORMULA_TEXT.glass;
-  if(id==='asbes') return FORMULA_TEXT.asbes;
-  if(id==='conc')  return FORMULA_TEXT.conc;
-  if(id==='plastic'||id==='pe100') return FORMULA_TEXT.plastic_pex;
-  if(inp.wear!=='old') return id==='ci'?FORMULA_TEXT.ci_new:FORMULA_TEXT.steel_new;
-  if(inp.sys==='hot'||r.v>=1.2) return FORMULA_TEXT.old_v_ge_1_2;
-  return FORMULA_TEXT.old_v_lt_1_2;
-}
-
 /* Расход, длина и местные сопротивления — параметры РАСЧЁТА, а не материала: именованная функция,
-   потому что их задают и shev-calculate, и shev-sweep (один раз на весь срез). */
+   потому что их задают и shev-losses, и shev-sweep (один раз на весь срез). */
 function calcInputs(a){
   if(a.q!==undefined){ $('q').value=String(a.q); }
   if(a.qunit!==undefined){ if(!['ls','mh'].includes(a.qunit)) throw new Error('qunit: ls|mh'); $('qunit').value=a.qunit; }
@@ -257,6 +249,17 @@ function configure(a){
   if(a.sdr!==undefined) setSdr(a.sdr);
   if(a.diameter_mm!==undefined) setDiameter(a.diameter_mm);
   if(a.wall_mm!==undefined) setWall(a.wall_mm);
+  /* dв напрямую (dv_mm) — самый естественный вопрос сантехника («посчитай при внутреннем 76 мм»).
+     Если значение ровно из сортамента — берём ту строку (dв подставит программа, экран показывает
+     настоящую трубу); иначе — ручной ввод галочкой «другой»: расчёт идёт РОВНО по dv_mm, и ответ
+     честно помечает это: dv_matched=false. */
+  let dvFrom='row', dvMatched;
+  if(a.dv_mm!==undefined){
+    const m=currentMat(), st=pageState();
+    const row=(dns(m,st)||[]).find(d=>Math.abs(m.page.dvOf(st,d)-a.dv_mm)<0.005);
+    if(row!==undefined) setDiameter(row); else{ setManualDv(a.dv_mm); dvFrom='manual'; }
+    dvMatched=dvFrom==='row';
+  }
   if(a.mode!==undefined && !fixedSys()){ // ci/ж/б: режимов и k нет — игнорируем
     if(!VEL_LIMIT[a.mode]) throw new Error('неизвестный режим: '+a.mode);
     const wantHot=MODE_SYS.hot.includes(a.mode);
@@ -296,17 +299,88 @@ function configure(a){
     }
   }
   updDv(); // dp зависит от wear (чугун: −1 мм только у «неновых») — обновить после всех параметров
-  return textResult({ok:true,material:currentMat().id,wear:rad('wear').value,
-    pipe_class:currentMat().cls?curCls():undefined,
-    dv_mm:$('dcv').value,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value,
-    pe:currentMat().pe?curPe():undefined,
-    sdr:currentMat().pe100?curPe100Sdr():(currentMat().pe?curSdr():undefined),
-    series:currentMat().series?curPexSdr():undefined,
+  const m=currentMat();
+  return textResult({ok:true,material:m.id,
+    // wear — только там, где блок «новые/неновые» ЕСТЬ (сталь, э/с, чугун): на остальных страницах его
+    // нет и в формулу он не входит, поэтому эхом «old» агент был бы введён в заблуждение.
+    wear:m.ui.wear?rad('wear').value:undefined,
+    pipe_class:m.cls?curCls():undefined,
+    diameter_mm:numStrict($('dsel').value)||undefined,
+    dv_mm:$('dcv').value,dv_from:dvFrom,dv_matched:dvMatched,
+    mode:$('mode').value,nu:$('nu').value,rho:$('rho').value,
+    pe:m.pe?curPe():undefined,
+    sdr:m.pe100?curPe100Sdr():(m.pe?curSdr():undefined),
+    series:m.series?curPexSdr():undefined,
     cu_system:spPage()?spSysVal():undefined,
-    t_c:currentMat().sMap?$('tcombo').value:undefined,
-    cu_nu:currentMat().sMap?$('cunu').value:undefined,
-    cu_rho:currentMat().sMap?$('curho').value:undefined,
-    xi_sum:currentMat().sMap?xiTotal():undefined});
+    t_c:m.sMap?$('tcombo').value:undefined,
+    cu_nu:m.sMap?$('cunu').value:undefined,
+    cu_rho:m.sMap?$('curho').value:undefined,
+    xi_sum:m.sMap?xiTotal():undefined});
+}
+
+/* Схемы параметров — константами, потому что их принимают четыре инструмента: объявлять один и тот
+   же ключ в четырёх схемах — значит держать в проекте четыре копии описаний, которые разъезжаются.
+   CONF_PROPS — входы страницы (apply → configure), D_PROPS — параметры ДИАМЕТРА (dн и dв),
+   CALC_PROPS — расход, длина и местные сопротивления (apply → calcInputs). */
+const CONF_PROPS={
+  material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, pe100, conc, grp, glass, copper, pex, metal-pex); если не передан — остаётся текущий'},
+  pe:{type:'string',enum:['32','63','80','100'],description:'только plastic: марка ПЭ (frmtablII5 Frame2) — от неё зависит, какие серии SDR допустимы; ставь ДО sdr'},
+  sdr:{type:'string',description:'серия труб: plastic/pe100 — номер SDR (например 11, 17; можно передать числом), pex — id серии (sdr11, sdr136). Серия меняет dв, а значит и ΔP: задавай её явно, не полагаясь на дефолт'},
+  cu_system:{type:'string',enum:['cold','circ','supply','heat'],description:'только copper/pex/metal-pex: система — cold=холодное водоснабжение (ф-ла 2, v≤4), circ=циркуляционный ГВС (ф-ла 2, v≤3), supply=подающие ГВС (ф-ла 3, v≤3), heat=отопление (ф-лы 5–9, v≤2)'},
+  t_c:{type:'number',enum:[50,60,70,80,90],description:'только copper/pex/metal-pex: температура воды °С (Combo3) — по ней программа подставляет ν и ρ (50→0,55e-6/990 … 90→0,36e-6/970); при пустой t ν=1,3e-6, ρ=1000'},
+  wear:{type:'string',enum:['new','old'],description:'новые/неновые. Блок есть только у стали, электросварных и чугуна (там wear меняет формулу); на остальных страницах параметр не входит в расчёт и в ответе не эхомется'},
+  pipe_class:{type:'string',enum:['ЛА','А','Б'],description:'класс чугунной трубы (только ci): единый список dу (14 значений, без 450/700/900) для всех классов, dp из таблицы класса'},
+  wall_mm:{type:'number',description:'толщина стенки мм (сталь/э/с/медь). У этих страниц толщина своя у КАЖДОГО диаметра, поэтому задавай её после diameter_mm; в срезе shev-sweep она ставится на каждый dн отдельно и если у этого dн такой толщины нет — строка вернёт {dn, error}'},
+  mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (игнорируется для ci, conc, grp и glass — на этих страницах режима нет)'},
+  nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); игнорируется для ci, conc, grp и glass — там ν=1,3·10⁻⁶ (t=10°C) зафиксирована'},
+  rho:{type:'number',description:'плотность, кг/м³; игнорируется для ci, conc, grp и glass — там ρ=1000 (t=10°C) зафиксирована'}
+};
+const D_PROPS={
+  diameter_mm:{type:'number',description:'диаметр ИЗ РЯДА страницы (dу/dн/du, мм). Значения не из ряда здесь ошибка — перечисли доступные в сообщении'},
+  dv_mm:{type:'number',description:'расчётный ВНУТРЕННИЙ диаметр напрямую, мм — как формулирует вопрос сантехник. Если значение ровно из сортамента, выбирается та строка (dv_from=»row«); иначе включается ручной ввод галочкой «другой» и расчёт идёт РОВНО по этому dв (dv_from=»manual«, dv_matched=false). На стали, э/с, чугуне, а/ц и ж/б ручного dв нет — там dв из сортамента, задавай diameter_mm (+ wall_mm/pipe_class)'}
+};
+const CALC_PROPS={
+  q:{type:'number',description:'расход (по умолчанию л/с)'},
+  qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
+  length_m:{type:'number',description:'длина участка L, м'},
+  k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci, conc, grp и glass: там H=i·L)'},
+  xi_total:{type:'number',description:'только copper: сумма ξ местных сопротивлений (Frame6 окна меди = ξ·количество + «другие ξ»); входит в H как V²Σξ/2g и в потери давления как Z=0,5ρV²Σξ'}
+};
+const schema=props=>({type:'object',properties:props});
+
+/* ПОТЕРИ — ДВА МАРШРУТА ВХОДА (описание — у shev-losses).
+   lossesByFlow: расход → скорость → потери, ровно как кнопка «Расчёт»: экран показывает результат,
+   в ответе есть raw (напечатанный программой текст) и рекомендация по диаметру.
+   lossesByVelocity: скорость УЖЕ известна (её принесли извне — паспорт, справочник, shev-velocity).
+   Расход не нужен, экран не трогается (там лежит прежний расчёт), числа считает движок напрямую:
+   calcLosses в js/calc.js заранее умеет v вместо q (lossesIn), поэтому движок не менялся.
+   Ключи ответа те же; рекомендации по диаметру нет — это «какой диаметр выгоден при расходе». */
+async function lossesByFlow(a){
+  configure(a); calcInputs(a); calc();
+  const r=readResult();
+  if(/ошибка|не должен|не может|не ввели/.test(r.raw)&&r.v_ms===null)
+    return textResult({ok:false,error:r.raw.trim()});
+  return textResult(Object.assign({ok:true},r,echo()));
+}
+async function lossesByVelocity(a){
+  const v=+a.v_ms;
+  if(!(v>0)) throw new Error('v_ms — скорость в м/с (> 0)');
+  configure(a);                       // сортамент: из него расчётный dв
+  calcInputs(a);                      // L, k, ξ — те же правила, что у расчёта по расходу
+  const inp=readForm();
+  const g=calcLosses(Object.assign({},inp,{q:NaN,v}));
+  if(!g.ok) return textResult({ok:false,error:g.error});
+  const m=currentMat(), lim=vLimit(m,inp,g.dv_mm);
+  return textResult({ok:true,screen:false,v_from:'v_ms',
+    inputs:Object.assign({},inp,{q:undefined}),
+    dv_mm:g.dv_mm,v_ms:g.v,i_mm_per_m:g.i1000,i_m_per_m:g.i,A:g.A,e:g.e,R_Pa_per_m:g.R,
+    H_m:g.H===undefined?null:g.H,dP_Pa:g.P===undefined?null:g.P,L_m:g.L===undefined?null:g.L,
+    law:g.law,method:FORMULA_TEXT[g.law],
+    // H и ΔP есть только при длине L (как в движке): без неё — только i и R
+    note:g.L===undefined?'length_m не задан — H и потери давления не считаются, только i и R':undefined,
+    warnings:speedNotes(m.id,g.dv_mm,g.v,inp.mode).map(n=>n.text),
+    verdict:{v_limit:lim?{min:lim[0],max:lim[1]}:undefined,
+      v_ok:lim?(g.v>=lim[0]&&g.v<=lim[1]):undefined,recommendation:null}});
 }
 
 /* ---- определения инструментов ---- */
@@ -317,14 +391,16 @@ const TOOLS=[
   inputSchema:{type:'object',properties:{}},
   async execute(){
     return textResult({
-      materials:MATERIALS.map(m=>({
-        id:m.id,name:m.name,
-        diameters_mm:(m.pe||m.pe100||m.series)? dns(m,defState(m)) : (m.id==='asbes'? m.vt.map(v=>v.du) : (m.gas? m.gas.dn : (m.cls? (m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b)) : m.d))),
-        has_wall_thickness:!!(m.wall||m.gas||m.sMap),   // медь (frmtablII9): dн + толщина S
-        dv_note:m.gas?'dp=dн−2s−1 (1 мм коррозия), задавай wall_mm':(m.wall?'dв=dн−2s, задавай wall_mm':(m.pe?'dв=dн−2e по ГОСТ 18599-2001 (марка pe и серия sdr в shev-configure, diameter_mm=dн)':(m.pe100?'dв=dн−2e, e — номинальная стенка выбранной серии (ГОСТ Р 70628.2-2023 табл. 2); series выбирается параметром sdr, diameter_mm=dн; «другой» — ручной dp':(m.id==='conc'?'dв=dу (ГОСТ 12586.0-83: 500…1600 мм, 9 значений); «другой» — ручной dp':(m.id==='grp'?'dв=d (СП40-104-2001: 50…400 мм, 13 значений списка программы); «другой» — ручной dp':(m.series?'diameter_mm=dн (СП 41-109-2005 табл. 1; список dн зависит от серии SDR — SDR 13,6: 16…110 (10), SDR 11 и SDR 9: 12…110 (13), SDR 7,4 и SDR 6: 12…110 (14)); dв = dн − 2S − ΔS + Δd/2 — подставляет программа (dн=16, SDR 13,6 → 13,15; dн=110 → 93,2); «другой dв» — ручной dp; местные сопротивления — ξ (xi_total в shev-calculate)':(m.sMap?'diameter_mm=dн (СП 40-108-2004: 6…267 мм — 20 значений списка программы); dв=dн−2S (S — толщина стенки из списка), задавай wall_mm; «другой» — ручной dp; местные сопротивления — ξ (xi_total в shev-calculate)':(m.dvMap?'diameter_mm=dн (ГОСТ 8894-86: 45, 67, 93, 122, 169, 221 мм — 6 значений списка программы); dв подставляет программа: 45→37, 67→57, 93→81, 122→108, 169→150, 221→198; «другой» — ручной dp':(m.dvSame?'dв=d':(m.cls?'dу единый список 65…1000 для ЛА/А/Б (450 нет); dв=dн−2S из таблицы класса; dp=dв−1 при dв≤300 и wear=old':'dв указан в dv')))))))))),
-        pipe_classes:m.cls?Object.keys(m.cls):undefined,
-        series:seriesInfo(m)
-      })),
+      materials:MATERIALS.map(m=>{
+        // всё знание о странице (ряд d, серии, классы, подпись dв) — в m.page.discovery
+        const d=m.page.discovery(defState(m));
+        return {id:m.id,name:m.name,
+          diameters_mm:d.diameters,
+          has_wall_thickness:!!(m.wall||m.gas||m.sMap),   // медь (frmtablII9): dн + толщина S
+          dv_note:d.note,
+          pipe_classes:d.pipe_classes,
+          series:d.series};
+      }),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
       units:['ls (л/с)','mh (м³/ч)']
     });
@@ -332,62 +408,41 @@ const TOOLS=[
  },
  {
   name:'shev-configure',
-  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (мм), толщину стенки (для электросварных), серию труб (pe — марка ПЭ, sdr — SDR), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Все параметры опциональны — меняется только переданное. На страницах чугуна, ж/б, стеклопластика и стекла режим/ν/ρ/k игнорируются (параметры программы). Возвращает подтверждение с расчётным dв и выбранной серией. ПОРЯДОК: material → pe → sdr → diameter_mm (серия меняет список диаметров, поэтому ставить её надо до диаметра), wall_mm после diameter_mm. ПРИМЕР: {material:"steel-es", diameter_mm:1120, wall_mm:10, wear:"old", mode:"dhw-supply"} → dp=1099; без wall_mm программа возьмёт ПЕРВУЮ доступную для этого dн толщину (у dн=1120 это 8 мм → dp=1103). У меди {material:"copper", diameter_mm:22, wall_mm:1.0, cu_system:"circ", t_c:50}; у ПЭ 100 {material:"pe100", sdr:"17", diameter_mm:110} — SDR без явного указания не задаётся и остаётся дефолтом страницы.',
-  inputSchema:{type:'object',properties:{
-    material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, pe100, conc, grp, glass, copper, pex, metal-pex)'},
-    pe:{type:'string',enum:['32','63','80','100'],description:'только plastic: марка ПЭ (frmtablII5 Frame2) — от неё зависит, какие серии SDR допустимы; ставь ДО sdr'},
-    sdr:{type:'string',description:'серия труб: plastic/pe100 — номер SDR (например 11, 17; можно передать числом), pex — id серии (sdr11, sdr136). Серия меняет dв, а значит и ΔP: задавай её явно, не полагаясь на дефолт'},
-    cu_system:{type:'string',enum:['cold','circ','supply','heat'],description:'только copper: система СП 40-108-2004 — cold=холодное водоснабжение (ф-ла 2, v≤4), circ=циркуляционный ГВС (ф-ла 2, v≤3), supply=подающие ГВС (ф-ла 3, v≤3), heat=отопление (ф-лы 5–9, v≤2)'},
-    t_c:{type:'number',enum:[50,60,70,80,90],description:'только copper: температура воды °С (Combo3) — по ней программа подставляет ν и ρ (50→0,55e-6/990 … 90→0,36e-6/970); при пустой t ν=1,3e-6, ρ=1000'},
-    wear:{type:'string',enum:['new','old'],description:'новые/неновые трубы'},
-    pipe_class:{type:'string',enum:['ЛА','А','Б'],description:'класс чугунной трубы (только ci): единый список dу (14 значений, без 450/700/900) для всех классов, dp из таблицы класса'},
-    diameter_mm:{type:'number',description:'выбранный диаметр из списка материала (dу/dн/du, мм)'},
-    wall_mm:{type:'number',description:'толщина стенки мм (стальные gas/электросварные steel-es)'},
-    mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (игнорируется для ci, conc, grp и glass — на этих страницах режима нет)'},
-    nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); игнорируется для ci, conc, grp и glass — там ν=1,3·10⁻⁶ (t=10°C) зафиксирована'},
-    rho:{type:'number',description:'плотность, кг/м³; игнорируется для ci, conc, grp и glass — там ρ=1000 (t=10°C) зафиксирована'}
-  }},
+  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (dн из ряда страницы ИЛИ dv_mm — расчётный внутренний напрямую), толщину стенки, серию труб (pe — марка ПЭ, sdr — SDR), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Все параметры опциональны — меняется только переданное. На страницах чугуна, ж/б, стеклопластика и стекла режим/ν/ρ/k игнорируются (параметры программы). Возвращает подтверждение: что выбрано, чему равен расчётный dв и откуда он взят (dv_from: row — из сортамента, manual — ручной ввод). ПОРЯДОК: material → pe → sdr → diameter_mm (серия меняет список диаметров, поэтому ставить её надо до диаметра), wall_mm после diameter_mm, dv_mm последним (перекрывает diameter_mm). ПРИМЕР: {material:"steel-es", diameter_mm:1120, wall_mm:10, wear:"old", mode:"dhw-supply"} → dp=1099; без wall_mm программа возьмёт ПЕРВУЮ доступную для этого dн толщину (у dн=1120 это 8 мм → dp=1103). У меди {material:"copper", diameter_mm:22, wall_mm:1.0, cu_system:"circ", t_c:50}; у ПЭ 100 {material:"pe100", sdr:"17", diameter_mm:110}; по внутреннему диаметру {material:"pe100", dv_mm:76} — расчёт ровно при dв=76 (dv_from=manual, dv_matched=false).',
+  inputSchema:schema(Object.assign({},CONF_PROPS,D_PROPS)),
   async execute(a){ return configure(a); }
  },
  {
-  name:'shev-calculate',
-  description:'Выполняет гидравлический расчёт участка (как кнопка «Расчёт»): скорость v, удельные потери i (мм/м) и R (Па/м), потери напора H=i·L·(1+k) (для ci, conc, grp и glass — H=i·L, местные сопротивления отсутствуют), потери давления (Па), предупреждения о скорости и экономическая рекомендация по диаметру. Параметры расхода/длины/местных сопротивлений опциональны — без них берутся текущие значения UI. Кроме разобранного текста отдаёт inputs (все входы расчёта, включая материал и серию — по ним расчёт воспроизводится), result (числа без округления печати) и verdict (предел скорости, v_ok и рекомендация: ok=true — выбранный диаметр уже экономически обоснован).',
+  name:'shev-velocity',
+  description:'СКОРОСТЬ ПОТОКА В ТРУБЕ: v = Q/(π·dв²/4). Принимает ровно то, что входит в формулу, — расчётный внутренний диаметр dв (мм) и расход: материал, ν, ρ, режим и длина в скорость не входят (одна формула velocity() на все 12 страниц, js/calc.js). Поэтому вызов НЕ зависит от того, что открыто на странице, и НИЧЕГО на экране не меняет: два одинаковых вызова дают одинаковый ответ. dв берётся из shev-list-materials (ряды диаметров и серии) или из shev-configure (dv_mm). Потери по этой скорости — shev-losses с v_ms.',
   inputSchema:{type:'object',properties:{
-    q:{type:'number',description:'расход (по умолчанию л/с)'},
-    qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
-    length_m:{type:'number',description:'длина участка L, м'},
-    k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci, conc, grp и glass: там H=i·L)'},
-    xi_total:{type:'number',description:'только copper: сумма ξ местных сопротивлений (Frame6 окна меди = ξ·количество + «другие ξ»); входит в H как V²Σξ/2g и в потери давления как Z=0,5ρV²Σξ'}
+    dv_mm:{type:'number',description:'расчётный внутренний диаметр dв, мм (у стали и чугуна «неновых» — уже с поправкой −1 мм на отложения; у полиэтилена — dн−2e выбранной серии)'},
+    q:{type:'number',description:'расход'},
+    qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с (по умолчанию), mh=м³/ч'}
   }},
   async execute(a){
-    calcInputs(a);
-    calc();
-    const r=readResult();
-    if(/ошибка|не должен|не может|не ввели/.test(r.raw)&&r.v_ms===null)
-      return textResult({ok:false,error:r.raw.trim()});
-    return textResult(Object.assign({ok:true},r,echo()));
+    if(!(a.dv_mm>0)) throw new Error('dv_mm — расчётный внутренний диаметр в мм (> 0)');
+    if(!(a.q>0)) throw new Error('q — расход (> 0)');
+    const q=qToM3s(a.q,a.qunit||'ls'), d=a.dv_mm/1000;
+    return textResult({ok:true,dv_mm:a.dv_mm,q:a.q,qunit:a.qunit||'ls',q_m3s:q,
+      S_cm2:+(Math.PI*d*d/4*1e4).toFixed(3),v_ms:velocity(q,a.dv_mm)});
   }
  },
  {
+  name:'shev-losses',
+  description:'ПОТЕРИ НАПОРА И ДАВЛЕНИЯ на участке — считает по ОДНОМУ из двух входов: РАСХОД q (скорость посчитается сама; экран покажет расчёт как кнопка «Расчёт», в ответе будут raw-текст программы и экономическая рекомендация по диаметру) или СКОРОСТЬ v_ms, если она уже известна извне (расход тогда не нужен; результат на экране не пересчитывается, рекомендации по диаметру нет — для неё нужен расход). Отдаёт: i (мм/м и м/м), R (Па/м), при длине L — H (м) и потери давления (Па), law/method — какой формулой фактически посчитано, предупреждения по скорости. Вход материала/сортамента — тот же словарь, что у shev-configure: он нужен, чтобы получить расчётный dв. Если надо и задать входы, и посчитать — это один вызов shev-losses.',
+  inputSchema:schema(Object.assign({},CONF_PROPS,D_PROPS,CALC_PROPS,
+    {v_ms:{type:'number',description:'СКОРОСТЬ, м/с — если она уже известна, q не нужен: потери считаются прямо по ней (экран не меняется, рекомендации по диаметру нет)'}})),
+  async execute(a){ return a.v_ms===undefined?lossesByFlow(a):lossesByVelocity(a); }
+ },
+ {
   name:'shev-sweep',
-  description:'Срез расчёта по списку диаметров одним вызовом: те же параметры, что у shev-configure (material, pe, sdr, mode, nu, rho, wear, wall_mm, cu_system, t_c), плюс dn — список диаметров, и расход с длиной. Материал и серия выставляются ОДИН раз, затем расчёт идёт по каждому dн — один вызов вместо N. Диаметр, которого нет в ряду выбранной серии, не роняет весь срез: в его строке придёт {dn, error}. Экран остаётся на последнем рассчитанном диаметре.',
-  inputSchema:{type:'object',properties:{
-    dn:{type:'array',items:{type:'number'},description:'список диаметров для среза, мм (dу/dн — как у материала, см. shev-list-materials)'},
-    material:{type:'string',description:'id материала; если не передан — остаётся текущий'},
-    pe:{type:'string',enum:['32','63','80','100'],description:'только plastic: марка ПЭ'},
-    sdr:{type:'string',description:'серия труб: plastic/pe100 — номер SDR, pex — id серии (sdr11, sdr136)'},
-    wear:{type:'string',enum:['new','old'],description:'новые/неновые трубы'},
-    wall_mm:{type:'number',description:'толщина стенки мм (сталь/э/с/медь). Ставится для каждого dн среза отдельно: толщина своя у каждого диаметра, и если у этого dн её нет — строка вернёт {dn, error} с перечнем доступных'},
-    mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers'},
-    nu:{type:'number',description:'ν, м²/с (игнорируется там же, где у shev-configure)'},
-    rho:{type:'number',description:'ρ, кг/м³ (игнорируется там же, где у shev-configure)'},
-    q:{type:'number',description:'расход, общий для всех диаметров (по умолчанию л/с)'},
-    qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
-    length_m:{type:'number',description:'длина участка L, м'}
-  }},
+  description:'Срез расчёта по списку диаметров одним вызовом: те же параметры страницы, что у shev-configure, плюс dn — список диаметров, и расход с длиной (k и xi_total тоже принимаются и действуют на весь срез). Материал и серия выставляются ОДИН раз, затем расчёт идёт по каждому dн — один вызов вместо N. Диаметр, которого нет в ряду выбранной серии, не роняет весь срез: в его строке придёт {dn, error}. Экран остаётся на последнем рассчитанном диаметре. Список — по dн: dv_mm здесь не принимается (ручной dв не менялся бы от строки к строке).',
+  inputSchema:schema(Object.assign({},CONF_PROPS,CALC_PROPS,{dn:{type:'array',items:{type:'number'},description:'список диаметров для среза, мм (dу/dн — как у материала, см. shev-list-materials)'}})),
+
   async execute(a){
     if(!Array.isArray(a.dn)||!a.dn.length) throw new Error('dn — непустой массив диаметров, мм');
-    configure(Object.assign({},a,{diameter_mm:undefined,wall_mm:undefined})); // материал/серия/режим — один раз
+    configure(Object.assign({},a,{diameter_mm:undefined,dv_mm:undefined,wall_mm:undefined})); // материал/серия/режим — один раз
     calcInputs(a);                                              // расход и длина — тоже один раз
     const rows=[];
     for(const dn of a.dn){
@@ -422,6 +477,26 @@ const TOOLS=[
  }
 ];
 
+/* ---- deep link: расчёт открывается ссылкой ----
+   ?material=pe100&sdr=13.6&diameter_mm=90&q=10&length_m=50 — те ЖЕ ключи и тот же apply, что у
+   shev-configure/shev-losses (один словарь параметров на весь проект, второй набор имён не
+   заводим). Применяется один раз при загрузке страницы; пустая строка и неизвестные ключи — ничего.
+   Обратную запись (подставлять состояние в адрес) не делаем: адрес и так собирается из inputs в
+   ответе расчёта, а replaceState на file:// в части браузеров бросает. */
+function applyQuery(qs){
+  const src=qs!==undefined?qs:(typeof location!=='undefined'?location.search:'');
+  if(!src||src.charAt(0)!=='?') return false;
+  const num=v=>{const n=numStrict(String(v).replace(',','.'));return isNaN(n)?undefined:n;};
+  const a={};
+  for(const [k,v] of new URLSearchParams(src.slice(1))){
+    if(k==='material'||k==='pe'||k==='sdr'||k==='wear'||k==='pipe_class'||k==='mode'||k==='cu_system'||k==='qunit') a[k]=v;
+    else if(k==='diameter_mm'||k==='wall_mm'||k==='dv_mm'||k==='t_c'||k==='q'||k==='length_m'||k==='k'||k==='xi_total'){ const n=num(v); if(n!==undefined) a[k]=n; }
+  }
+  if(!Object.keys(a).length) return false;
+  try{ configure(a); calcInputs(a); calc(); return true; }
+  catch(e){ $('out').textContent='Ошибка параметров ссылки: '+e.message; return false; }
+}
+
 /* ---- регистрация ---- */
 function registerWebMCP(){
   const {mc,native}=getModelContext();
@@ -431,3 +506,4 @@ function registerWebMCP(){
   });
 }
 registerWebMCP();
+applyQuery();   // ?material=…&diameter_mm=… — расчёт из ссылки открывается уже посчитанным

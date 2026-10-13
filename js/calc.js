@@ -46,17 +46,17 @@ function velocity(q_m3s,dp_mm){ const d=dp_mm/1000; return q_m3s/(Math.PI*d*d/4)
 
 /* ─── удельные потери (уклон): i = A·v²/dp^e, A ≡ λ/(2g); формулы — formulas.js ─── */
 function gradient(mat,wear,v,dp_mm,sys){
- const d=dp_mm/1000; const {A,e}=iCalc(wear,mat,v,d,sys);
- return {A,e,i:A*v*v/Math.pow(d,e)};
+ const d=dp_mm/1000; const {A,e,law}=iCalc(wear,mat,v,d,sys);
+ return {A,e,law,i:A*v*v/Math.pow(d,e)};
 }
 /* ─── удельные потери веткой материала ───
    сталь/э/с — точные формулы EXE (ν входит: агент const-check, 10.10.2026), остальные — степенная
    модель i = A·v²/d^e из gradient(). Одно место и для окна, и для внешнего calcLosses: копия этого
    правила уже разводила расчёт с выводом страницы. */
 function iOf(mat,wear,v,dv_mm,nu,sys){
- if(mat==='steel'||mat==='steel-es'){
-  const d=dv_mm/1000, i=steelI(v,d,(!isNaN(nu)&&nu>0)?nu:NU_FIX,wear);
-  return {A:i/(v*v/Math.pow(d,1.3)), e:1.3, i};
+ if(mat==='steel'||mat==='steel-es'){                       // сталь и э/с: формулы EXE (5)–(7)
+  const d=dv_mm/1000, g=steelI(v,d,(!isNaN(nu)&&nu>0)?nu:NU_FIX,wear);
+  return {A:g.i/(v*v/Math.pow(d,1.3)), e:1.3, law:g.law, i:g.i};
  }
  return gradient(mat,wear,v,dv_mm,sys);
 }
@@ -241,7 +241,7 @@ function spCalc(inp,m){
  if(isNaN(nu)) nu=NU_FIX;                 // t<50 или t не выбран: ν = 1,3·10⁻⁶ (DAT_00402448)
  if(isNaN(rho)||rho<=0) rho=RHO_FIX;
  const v=velocity(b.q,b.dv), d=b.dv/1000;
- const {i,R}=P.loss(S,nu,v,d,rho,inp.pexSp);
+ const g=P.loss(S,nu,v,d,rho,inp.pexSp), i=g.i, R=g.R;
  const xi=isNaN(inp.xiSum)?0:inp.xiSum;
  const H=i*b.L + v*v*xi/G2, Z=0.5*rho*v*v*xi, P_dP=R*b.L+Z;
  // Строки вывода собирает движок, но ТЕКСТЫ и формат задаёт страница (page.out) — у меди и PEX
@@ -256,7 +256,7 @@ function spCalc(inp,m){
  const notes=[];
  if(v>S.lim){ notes.push({cls:'warn',text:'Большая скорость! Рекомендуется увеличить диаметр'});
               notes.push({cls:'warn',text:S.note}); }
- return {ok:true,q:b.q,qunit:inp.qunit,v,i,i1000:i*1000,R,H,P:P_dP,Z,xi,dv_mm:b.dv,L:b.L,rho,nu,sys,
+ return {ok:true,q:b.q,qunit:inp.qunit,v,i,i1000:i*1000,R,law:g.law,H,P:P_dP,Z,xi,dv_mm:b.dv,L:b.L,rho,nu,sys,
    hLegend:'Потери напора на участке, м',lines,outH,notes};
 }
 
@@ -298,7 +298,7 @@ function shevCalc(inp){
  const notes=speedNotes(mat,dv,v,inp.mode);
  const rec=recommendation(mat,inp.wear,q,inp.selD,inp.dpOf||(()=>NaN));
  if(rec) notes.push(rec);
- return {ok:true,q,qunit:inp.qunit,v,i,i1000:i*1000,A,e,R,H,P,k,dv_mm:dv,L,rho,
+ return {ok:true,q,qunit:inp.qunit,v,i,i1000:i*1000,A,e,law:g.law,R,H,P,k,dv_mm:dv,L,rho,
   hLegend:kused?'Потери напора на участке, м':'Потери напора по длине, м',
   lines,outH,notes};
 }
@@ -356,15 +356,15 @@ function lossesIn(inp){
  return {ok:true,v,d:dv/1000,dv,L:hasL?L:null,hasL};
 }
 function lossesShevelev(inp){
- const law=inp.law||inp.mat;
- if(!law) return {ok:false,error:'нужен закон: law (steel|ci|asbes|conc|plastic|pex|pe100|grp|glass)'};
+ const fam=inp.law||inp.mat;                 // имя СЕМЕЙСТВА (строка закона), не имя формулы
+ if(!fam) return {ok:false,error:'нужен закон: law (steel|ci|asbes|conc|plastic|pex|pe100|grp|glass)'};
  const b=lossesIn(inp); if(!b.ok) return b;
- const hot=law==='steel'||law==='steel-es';
+ const hot=fam==='steel'||fam==='steel-es';
  const rho=hot?((!isNaN(inp.rho)&&inp.rho>0)?inp.rho:RHO_FIX):RHO_FIX;
  let k=hot?(isNaN(inp.k)?0:(inp.k||0)):0;
  if(inp.mest===false) k=0; // в окне снятая галка обнуляет k; здесь opt-out явный
- const g=iOf(law,inp.wear,b.v,b.dv,inp.nu,inp.sys), R=pressure(g.i,rho);
- const out=Object.assign({i:g.i,i1000:g.i*1000,A:g.A,e:g.e,R,k,rho,xi:0,law},{v:b.v,dv_mm:b.dv,L:b.L});
+ const g=iOf(fam,inp.wear,b.v,b.dv,inp.nu,inp.sys), R=pressure(g.i,rho);
+ const out=Object.assign({i:g.i,i1000:g.i*1000,A:g.A,e:g.e,law:g.law,R,k,rho,xi:0},{v:b.v,dv_mm:b.dv,L:b.L});
  if(b.hasL) Object.assign(out,{H:head(g.i,b.L,k), P:R*b.L*(1+k)});
  return Object.assign({ok:true},out);
 }
@@ -384,9 +384,9 @@ function lossesSP(inp){
  }
  if(isNaN(nu)||nu<=0) nu=NU_FIX;
  if(isNaN(rho)||rho<=0) rho=RHO_FIX;
- const {i,R}=P.loss(S,nu,b.v,b.d,rho,inp.pexSp);
+ const g=P.loss(S,nu,b.v,b.d,rho,inp.pexSp), i=g.i, R=g.R;
  const xi=isNaN(inp.xiSum)?0:inp.xiSum;
- const out=Object.assign({i,i1000:i*1000,R,xi,nu,rho,sys,heat:!!S.heat},{v:b.v,dv_mm:b.dv,L:b.L});
+ const out=Object.assign({i,i1000:i*1000,R,law:g.law,xi,nu,rho,sys,heat:!!S.heat},{v:b.v,dv_mm:b.dv,L:b.L});
  if(b.hasL) Object.assign(out,{Z:0.5*rho*b.v*b.v*xi, H:i*b.L+b.v*b.v*xi/G2, P:R*b.L+0.5*rho*b.v*b.v*xi});
  return Object.assign({ok:true},out);
 }

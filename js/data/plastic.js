@@ -58,6 +58,16 @@
 
 /* page — поведение страницы (рефакторинг 13.10.2026): чистые функции, без DOM. */
 MAT_PLASTIC.page={
+  // discovery — что о странице сообщает shev-list-materials: ряд диаметров (для серии,
+  // выставленной в st), закон dв словами и, где есть, серии/классы труб. Знание здесь, а не в
+  // ветвлении инструмента: прежняя цепь в webmcp.js однажды выдала metal-pex текст подписи стекла.
+  discovery(st){ return {
+    diameters:(this.rows(st)||[]).map(r=>r[0]),
+    series:Object.keys(MAT_PLASTIC.pe).map(mark=>({mark,
+      series:this.peOrder.filter(s=>MAT_PLASTIC.pe[mark][s])
+        .map(s=>({id:s,label:'SDR '+s,dn:(this.rows({pe:mark,sdr:s})||[]).map(r=>r[0])}))})),
+    note:'dв=dн−2e по ГОСТ 18599-2001 (марка pe и серия sdr в shev-configure, diameter_mm=dн)'
+  }; },
   blocks:['peRow','sdrRow'],     // радио марки ПЭ и серии SDR (frmtablII5, Option1–4 и Option5–13)
   otherCap:'не по ГОСТу',        // Check1 этой страницы озаглавлен не «другой», а «не по ГОСТу»
   labels:{d:'Наружный диаметр dн, мм:', dv:'Внутренний диаметр dв, мм:'},
