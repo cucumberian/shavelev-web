@@ -90,7 +90,9 @@ MAT_PLASTIC.page={
     const e=col&&col[+d];
     return e===undefined ? NaN : +d-2*e;
   },
-  rec:{mode:'ranges', rows:[
+  /* axis — ряд рекомендации задан в НАРУЖНОМ диаметре dн (у стали, чугуна, а/ц и ж/б — в dу);
+     отдаётся агентом вместе с оптимумом. */
+  rec:{mode:'ranges', axis:'dн', rows:[
   [ 63,   2.1],
   [ 75,   3.2],
   [ 90,   5.1],

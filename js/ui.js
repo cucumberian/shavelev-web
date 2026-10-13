@@ -388,8 +388,14 @@ function readForm(){
   pexSp:!!($('pexSp') && $('pexSp').checked), // PEX: по формуле (4) СП вместо кода программы
  };
 }
+/* Результат последнего расчёта: входы, состояние страницы и движковый r — то, что calc() рисует.
+   Отдаётся WebMCP-инструменту shev-calculate, поэтому числа уходят числами (а не выскребаются из
+   отрендеренного текста регулярками) и вместе с cls заметок дают машинный вердикт по скорости и
+   рекомендации. Прямой вызов calc(), не дошедший до расчёта, → null (сброс в начале calc()). */
+let lastCalc=null;
 function calc(){
  const out=$('out');
+ lastCalc=null;
  $('outH').innerHTML='—';
   const m=currentMat(), st=pageState();
   /* Расчётный диаметр для ЭЛЕМЕНТА РЯДА строки рекомендации. Ряд у стали задан в dу, а #dsel этой
@@ -404,6 +410,7 @@ function calc(){
  const inp=readForm(); inp.dpOf=dpOf;
  const r=shevCalc(inp);
  if(!r.ok){out.innerHTML=`<span class="warn">${r.error}</span>`;return;}
+  lastCalc={inp,st,r};
  $('hLegend').textContent=r.hLegend;
  out.innerHTML=r.lines.join('\n')+'\n'+r.notes.map(n=>`<span class="${n.cls}">${n.text}</span>`).join('\n');
  $('outH').innerHTML=r.outH.join('\n');
