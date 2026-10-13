@@ -59,6 +59,11 @@
     <label><input type="radio" name="pexsdr" value="sdr9"> SDR 9 (4)</label>
     <label><input type="radio" name="pexsdr" value="sdr74"> SDR 7,4 (S3,2)</label>
     <label><input type="radio" name="pexsdr" value="sdr6"> SDR 6 (2,5)</label></div>
+  <!-- ПЭ 100 по ГОСТ Р 70628.2-2023: страница клона (в оригинале её нет), поэтому выбор построен
+       от номинального давления PN — так трубу указывают в проекте, а не серией SDR. Кнопки
+       строятся из данных страницы (js/data/pe100.js), value = id серии SDR. -->
+  <div class="row full" id="pnRow" style="display:none"><b>Номинальное давление:</b>
+    <span class="pnbox" id="pnBox"></span></div>
  </div>
  <div id="srcRight">
  <div class="row full" id="vtRow" style="display:none"><b>Условный проход, мм:</b>
@@ -66,7 +71,7 @@
    <label><input type="radio" name="vt" value="ВТ9"> ВТ9</label>
    <label><input type="radio" name="vt" value="ВТ12"> ВТ12</label>
    <label><input type="radio" name="vt" value="ВТ15"> ВТ15</label></div>
- <div class="row"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
+ <div class="row" id="dRow"><b id="dLabel">Диаметр:</b> <select id="dsel" class="w-d"></select></div>
  <div class="row full" id="tipRow" style="display:none"><b>Тип труб по размерам:</b>
    <label><input type="radio" name="tip" value="1" checked> Тип 1</label>
    <label><input type="radio" name="tip" value="2"> Тип 2</label>
@@ -81,6 +86,18 @@
  <div class="row full" id="ciDims" style="display:none"><span id="ciDimsLine"></span></div>
  </div>
  </div>
+</fieldset>
+
+<!-- ПЭ 100 (ГОСТ Р 70628.2-2023): весь ряд размеров выбранной серии виден сразу, диаметр
+     выбирается кликом по строке — вместо выпадающего списка из одного значения. Таблица
+     строится из данных страницы (js/data/pe100.js): dн, e (номинальная стенка) и dв = dн − 2e. -->
+<fieldset class="fields" id="peTableField" style="display:none"><legend>Размеры труб</legend>
+ <div class="row full"><span id="peTableCap" class="peCap"></span></div>
+ <div class="peTableWrap">
+  <table id="peTable"><thead><tr><th>dн, мм</th><th>e, мм</th><th>dв, мм</th></tr></thead>
+   <tbody id="peTableBody"></tbody></table>
+ </div>
+ <div class="row full"><span class="hint">Клик по строке выбирает диаметр. e — номинальная толщина стенки (табл. 2), dв = dн − 2e.</span></div>
 </fieldset>
 
 <fieldset class="fields" id="sysField"><legend>Режим / теплоноситель</legend>
@@ -220,6 +237,7 @@
 <script src="js/help/copper.js"></script>
 <script src="js/help/pex.js"></script>
 <script src="js/help/metal-pex.js"></script>
+<script src="js/help/pe100.js"></script>
 <script src="js/tex.js"></script>
 <script src="js/formulas.js"></script>
 <script src="js/data/registry.js"></script>
@@ -237,6 +255,7 @@
 <script src="js/data/xi-pics.js"></script><!-- мини-схемы Frame6 «Местные сопротивления» -->
 <script src="js/data/pex.js"></script>
 <script src="js/data/metal-pex.js"></script>
+<script src="js/data/pe100.js"></script><!-- ГОСТ Р 70628.2-2023: страница клона, в EXE её нет -->
 <script src="js/calc.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/webmcp.js"></script>

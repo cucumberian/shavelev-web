@@ -129,7 +129,9 @@ function iCalc(wear, mat, v, d, sys){
   }
   if(mat==='asbes')   return {A:F.asbes(v),  e:1.190};
   if(mat==='conc')    return {A:F.conc(v),   e:1.190};
-  if(mat==='plastic'||mat==='pex'||mat==='metal-pex') return {A:F.plastic(v), e:1.226};
+  if(mat==='plastic'||mat==='pex'||mat==='metal-pex'||mat==='pe100') return {A:F.plastic(v), e:1.226};
+  // pe100 — та же полиэтиленовая формула (8) книги Шевелевых, что у страницы ГОСТ 18599-2001:
+  // ГОСТ Р 70628.2-2023 нормирует только сортамент, гидравлики в нём нет вовсе.
   if(mat==='grp')     return {A:F.grp(v,d),  e:1};      // λ=0,0146(v·dp)^−0,226; i=λ·v²/(2g·dp)
   if(mat==='glass')   return {A:F.glass(v),  e:1.226};
   return {A:F.oldA(), e:1.3};

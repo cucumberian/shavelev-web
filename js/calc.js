@@ -61,8 +61,8 @@ const NU_FIX=1.3e-6, RHO_FIX=1000;
      ui.cu   — страница со своими рамками «Выбор системы»/«Температура»/«Теплоноситель»/ξ
                (copper frmtablII9, pex frmtablII10, metal-pex).
    NO_SYS/NO_WEAR — резервный список для страниц без карты (и эталон для calc_test.js). */
-const NO_SYS=['ci','asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
-const NO_WEAR=['asbes','plastic','pex','metal-pex','conc','grp','glass','copper'];
+const NO_SYS=['ci','asbes','plastic','pe100','pex','metal-pex','conc','grp','glass','copper'];
+const NO_WEAR=['asbes','plastic','pe100','pex','metal-pex','conc','grp','glass','copper'];
 function matOf(id){ return MATERIALS.find(m=>m.id===id) }
 function uiFlag(mat,key,fallback){ const m=matOf(mat); return (m&&m.ui&&key in m.ui)?!!m.ui[key]:fallback }
 function usesSys(mat){ return uiFlag(mat,'sys',!NO_SYS.includes(mat)) }
@@ -105,17 +105,29 @@ function speedNotes(mat,dv_mm,v,mode){
    последнего диаметра → «более 500мм». Числа в строке — как VB6 Str(): точка, хвостовые нули отброшены
    («При расходе 3л/сек =10.8м куб/ч …»). */
 function vbs(x){ return String(Math.round(x*100)/100); }
-function recRanges(mat,rows,q_m3s,selD){
- const qls=q_m3s*1000, m3=q_m3s*3600, pre=`При расходе ${vbs(qls)}л/сек =${vbs(m3)}м куб/ч `;
+/* opts — различия страниц а/ц и пластика (см. registry.js). По умолчанию — поведение а/ц. */
+function recRanges(mat,rows,q_m3s,selD,opts){
+ const o=opts||{}, word=o.word||'с условным проходом';
+ const qls=q_m3s*1000, m3=q_m3s*3600;
+ // формат чисел: у а/ц — VB6 Str() («3л/сек =10.8м куб/ч»), у пластика — «2,00 л/сек = 7,20 м куб/ч»
+ const nums=o.fmt2
+   ? `${fmt2(qls)} л/сек = ${fmt2(m3)} м куб/ч`
+   : `${vbs(qls)}л/сек =${vbs(m3)}м куб/ч`;
+ const pre=`При расходе ${nums} `;   // красная строка: общий префикс EXE 0x444fd8 «При расходе »
  const first=rows[0], last=rows[rows.length-1];
- if(qls<5) return {cls:'warn',text:pre+`рекомендуется использовать трубу с условным проходом менее ${first[0]}мм`};
- if(qls===5) return null;   // ровно 5 — дырка оригинала (строгие неравенства), проверено живьём
- if(qls>last[1]) return {cls:'warn',text:`Большая скорость! `+pre+`рекомендуется использовать трубу с диаметром более ${last[0]}мм`};
+ if(o.below!==false && qls<5)
+   return {cls:'warn',text:pre+`рекомендуется использовать трубу ${word} менее ${first[0]}мм`};
+ if(o.five!==false && qls===5) return null;   // дырка оригинала а/ц (строгие неравенства), проверено живьём
+ if(qls>last[1]) return {cls:'warn',text:o.overflow
+   ? 'Большая скорость! '+o.overflow
+   : `Большая скорость! `+pre+`рекомендуется использовать трубу с диаметром более ${last[0]}мм`};
  let opt=null;
  for(const [du,qmax] of rows){ if(qls<=qmax){ opt=du; break; } }
  if(opt===null) return null;
- if(opt===selD) return {cls:'ok',text:`Применение трубы с условным проходом ${opt}мм `+pre+`экономически обосновано`};
- return {cls:'warn',text:pre+`рекомендуется использовать трубу с условным проходом ${opt}мм`};
+ // зелёная строка — своя строка EXE на каждый диаметр: «Применение трубы … Nмм при расходе » (0x445130),
+ // «при» здесь СТРОЧНАЯ (у общего префикса 0x444fd8 — заглавная)
+ if(opt===selD) return {cls:'ok',text:`Применение трубы ${word} ${opt}мм при расходе ${nums} экономически обосновано`};
+ return {cls:'warn',text:pre+`рекомендуется использовать трубу ${word} ${opt}мм`};
 }
 
 /* ─── строка рекомендации (ряды ECON_ROWS; подписи строк в EXE 0x44fd4..0x47434) ───
@@ -124,7 +136,7 @@ function recRanges(mat,rows,q_m3s,selD){
    стенки (газовые/э/с), класса и «неновые» (чугун), SDR (ПЭ). */
 function recommendation(mat,wear,q_m3s,selD,dpOf){
  const m=matOf(mat), rng=ECON_RANGES[mat];
- if(rng) return recRanges(mat,rng,q_m3s,selD);
+ if(rng) return recRanges(mat,rng,q_m3s,selD,ECON_RANGE_OPTS[mat]);
  const rows=ECON_ROWS[mat];
  if(!rows) return null;
  const qls=q_m3s*1000, m3=q_m3s*3600;

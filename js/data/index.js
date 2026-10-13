@@ -15,6 +15,7 @@ require("./glass.js");
 require("./copper.js");
 require("./pex.js");
 require("./metal-pex.js");
+require("./pe100.js");   // ГОСТ Р 70628.2-2023 (ПЭ 100) — страница клона, в EXE её нет
 const {DOCS} = require("./docs.js");
 const {VREC,VEL_LIMIT,K_MODE,MODE_SYS,MODE_LABELS} = require("./modes.js");
 

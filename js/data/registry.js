@@ -29,21 +29,36 @@
 
 const MATERIALS = [];
 const ECON_ROWS = {};
-/* ECON_RANGES — рекомендация по ТАБЛИЦЕ ДИАПАЗОНОВ РАСХОДА (л/с): [[dу, Qот, Qдо], …].
-   Так устроена страница а/ц (frmtablII4): в EXE есть ветка `If Q < 5` (__vbaVarTstLt @0x4cb9c9)
-   и по строке-шаблону на каждый диаметр — своя красная и своя зелёная строка (0x4450b8…0x4457d0
-   и 0x445134…0x445750). Берётся НАИМЕНЬШИЙ диаметр, чей диапазон содержит Q; совпал с выбранным →
-   «экономически обосновано», иначе → «рекомендуется использовать трубу …». */
+/* ECON_RANGES — рекомендация по ТАБЛИЦЕ ПРЕДЕЛЬНЫХ РАСХОДОВ (л/с): [[диаметр, Qпред], …].
+   Так устроены страницы а/ц (frmtablII4) и пластика (frmtablII5): по строке-шаблону на каждый
+   диаметр — своя красная и своя зелёная строка. Берётся НАИМЕНЬШИЙ диаметр, чей предел не меньше Q;
+   совпал с выбранным → «экономически обосновано», иначе → «рекомендуется использовать трубу …».
+
+   Таблица — «Предельные экономические расходы», книга Шевелевых 1984, табл. 12 (колонка Э=0,75):
+   а/ц — стр. 25, пластик — стр. 26–27 (ряд по НАРУЖНОМУ диаметру). Числа пластика сверены с
+   машинным кодом: 19 пределов лежат Variant-парами в 0x4de7cb…0x4df317.
+
+   opts настраивает поведение страницы (у а/ц и пластика оно РАЗНОЕ — это не косметика):
+     word     — «с условным проходом» (а/ц) или «диаметром» (пластик, m.pe);
+     below    — строка «…менее первого диаметра»: у а/ц есть (0x445030), у пластика НЕТ вовсе,
+                поэтому при Q ниже первого предела пластик просто берёт первый диаметр;
+     five     — дырка автора при Q ровно 5: у а/ц есть (строгие `Q<5` / `Q>5`), у пластика нет
+                (сравнение `Q ≤ предел` нестрогое — живая точка Q=5 → 90мм);
+     overflow — текст переполнения: а/ц печатает числа («…более 500мм»), пластик — готовую фразу
+                «Большая скорость! Рекомендуется применить трубу большего диаметра» (0x46a38);
+     fmt2     — числа как «2,00» / «7,20» (пластик) вместо VB6 Str() «2» / «7.2» (а/ц). */
 const ECON_RANGES = {};
+const ECON_RANGE_OPTS = {};
 function registerMaterial(m){ MATERIALS.push(m); return m; }
 function registerRec(mat, rows){ ECON_ROWS[mat] = rows; }
-function registerRecRanges(mat, rows){ ECON_RANGES[mat] = rows; }
+function registerRecRanges(mat, rows, opts){ ECON_RANGES[mat] = rows; if(opts) ECON_RANGE_OPTS[mat]=opts; }
 // в node-тестах модули грузятся require-ом: экспорт registry виден им только через globalThis
 globalThis.MATERIALS = MATERIALS; globalThis.ECON_ROWS = ECON_ROWS; globalThis.ECON_RANGES = ECON_RANGES;
+globalThis.ECON_RANGE_OPTS = ECON_RANGE_OPTS;
 globalThis.registerMaterial = registerMaterial; globalThis.registerRec = registerRec;
 globalThis.registerRecRanges = registerRecRanges;
 
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
-  module.exports={MATERIALS,ECON_ROWS,ECON_RANGES,registerMaterial,registerRec,registerRecRanges};
+  module.exports={MATERIALS,ECON_ROWS,ECON_RANGES,ECON_RANGE_OPTS,registerMaterial,registerRec,registerRecRanges};
 }

@@ -123,6 +123,24 @@ fieldset.off input[type=radio],fieldset.off input[type=checkbox],
 .coolParams{min-width:0}
 .coolParams .row{grid-template-columns:auto minmax(48px,1fr)}
 
+/* ===== ПЭ 100 по ГОСТ Р 70628.2-2023: выбор по PN + таблица размеров ===== */
+/* Кнопки PN — в строку с переносом (10 серий), подпись «PN 25» читается как в проекте */
+.pnbox{display:inline-flex;flex-wrap:wrap;gap:2px 10px;vertical-align:middle}
+.pnbox label{white-space:nowrap}
+/* Таблица размеров выбранной серии: весь ряд сразу, строка выбирается кликом.
+   Высота ограничена, чтобы длинный ряд (у SDR 9 — 26 диаметров) не растягивал страницу. */
+.peCap{font-size:12px;color:#333}
+.peTableWrap{max-height:230px;overflow:auto;border:1px solid #7f9db9;background:#fff;margin:4px 0}
+#peTable{border-collapse:collapse;width:100%;font-size:12px}
+#peTable th{position:sticky;top:0;background:#e4e1d4;border-bottom:1px solid #7f9db9;
+ padding:2px 6px;text-align:right;font-weight:bold;z-index:1}
+#peTable td{padding:1px 6px;text-align:right;border-bottom:1px solid #eeecdf;cursor:pointer;
+ font-variant-numeric:tabular-nums}
+#peTable tbody tr:hover td{background:#eef3fa}
+#peTable tbody tr.sel td{background:#cfe0f5;font-weight:bold}
+#peTable tbody tr.off td{color:var(--off-fg);cursor:not-allowed;background:transparent}
+#peTableField.off .peTableWrap{border-color:var(--off-border)}
+
 /* ===== планшет/узкое окно: колонки в столбик (порог 820 — чтобы iPad-портрет 768 тоже складывался) ===== */
 @media (max-width:820px){
  .col2{flex-direction:column;gap:0}
