@@ -58,7 +58,7 @@ function pexHelpIntro(){
   '  <div class="drow"><span class="dsym"><i>R</i></span><span>— удельные потери давления по длине, Па/м;</span></div>',
   '  <div class="drow"><span class="dsym">К<sub>э</sub></span><span>— эквивалентная шероховатость, м (для PEX 1,0·10⁻⁶ м — п. 3.5.3 СП 41-109-2005);</span></div>',
   '  <div class="drow"><span class="dsym"><i>Z</i></span><span>— потери давления в местных сопротивлениях, Па; Σξ — их сумма;</span></div>',
-  '  <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, м/с² (в формулах страницы 9,81; 2g = 19,62).</span></div>',
+  '  <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, м/с² (в формулах страницы 9,80665; 2g = 19,6133).</span></div>',
   ' </div>',
   ' <div class="hint">Галка «считать по формуле (4) СП 41-109» переключает λ: снята — формула программы (в её коде множитель lg(3,7<i>d</i><sub>p</sub>/К<sub>э</sub>) умножается на всю скобку и сокращается), стоит — формула СП с множителем внутри скобки. Числа подставляются только в ту формулу, по которой идёт расчёт; вторая показана с пометкой «по этой формуле расчёт не ведётся».</div>',
   '</div>'
@@ -127,7 +127,7 @@ function pexHelpFormulas(){
 
   {h:'i — гидравлический уклон, м/м', s:'СП 40-102-2000, формула (2)',
    t:'i=\\frac{\\lambda\\cdot V^{2}}{2g\\cdot d_p}', step:'i',
-   note:'расчёт ведётся: λ — из формулы выше (СП или программы — по галке); g = 9,81 м/с², 2g = 19,62',
+   note:'расчёт ведётся: λ — из формулы выше (СП или программы — по галке); g = 9,80665 м/с², 2g = 19,6133',
    p:['λ — коэффициент сопротивления по длине (из (4) СП или формулы программы)',
       'V — средняя скорость, м/с','d<sub>p</sub> — расчётный диаметр, м',
       'на странице i печатается в м/м для ХВС и ГВС (для отопления вместо i печатается R)']},
@@ -153,7 +153,7 @@ function pexHelpFormulas(){
    t:'H=L\\cdot i+\\frac{V^{2}\\cdot\\Sigma\\xi}{2g}', step:'H',
    p:['L — расчётная длина участка, м','i — гидравлический уклон, м/м',
       'V — средняя скорость, м/с','Σξ — сумма коэффициентов местных сопротивлений',
-      '2g = 19,62 м/с² — константа программы; H печатается на странице всегда']},
+      '2g = 19,6133 м/с² — константа программы; H печатается на странице всегда']},
 
   {h:'ΔP — потери давления на участке, Па', s:'СП 41-109-2005, формула (2)',
    t:'\\Delta P=R\\cdot l+Z', step:'P',
@@ -187,10 +187,10 @@ function pexHelpStep(kind){
      '√λ = '+f(Math.sqrt(st.lamSP),6)+' (λ = '+f(st.lamSP,6)+')');
   case 'lamProg': return N('0,5\\left(\\frac{'+f(st.b,4)+'}{2}+1,312(2-'+f(st.b,4)+')\\right)\\Big/\\left(\\lg '+f(st.re,0)+'-1\\right)',
      '√λ = '+f(Math.sqrt(st.lamPr),6)+' (λ = '+f(st.lamPr,6)+')');
-  case 'i': return N('\\frac{'+f(st.sp?st.lamSP:st.lamPr,6)+'\\cdot '+f(v,3)+'^{2}}{2\\cdot 9,81\\cdot '+f(d,5)+'}', f(r.i,3)+' м/м');
+  case 'i': return N('\\frac{'+f(st.sp?st.lamSP:st.lamPr,6)+'\\cdot '+f(v,3)+'^{2}}{2\\cdot 9,80665\\cdot '+f(d,5)+'}', f(r.i,3)+' м/м');
   case 'R': return N('\\frac{'+f(st.sp?st.lamSP:st.lamPr,6)+'\\cdot '+f(v,3)+'^{2}}{2\\cdot '+f(d,5)+'}\\cdot 10^{3}', fmt3(r.R)+' Па/м');
   case 'Z': return N(f(r.xi,2)+'\\cdot\\frac{'+f(v,3)+'^{2}}{2}\\cdot '+f(st.rho,0), fmt3(r.Z)+' Па <span class="fParam">Σξ = '+f(r.xi,2)+'</span>');
-  case 'H': return N(f(L,0)+'\\cdot '+f(r.i,6)+'+\\frac{'+f(v,3)+'^{2}\\cdot '+f(r.xi,2)+'}{2\\cdot 9,81}', fmt3(r.H)+' м <span class="fParam">Σξ = '+f(r.xi,2)+'</span>');
+  case 'H': return N(f(L,0)+'\\cdot '+f(r.i,6)+'+\\frac{'+f(v,3)+'^{2}\\cdot '+f(r.xi,2)+'}{2\\cdot 9,80665}', fmt3(r.H)+' м <span class="fParam">Σξ = '+f(r.xi,2)+'</span>');
   case 'P': return N(fmt3(r.R)+'\\cdot '+f(L,0)+'+'+fmt3(r.Z), (st.sys==='heat'?fmt3(r.P):fmt(r.P,0))+' Па');
  }
  return '';

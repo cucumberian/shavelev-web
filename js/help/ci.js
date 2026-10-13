@@ -12,7 +12,7 @@ function ciHelpState(){
  const m=currentMat(); if(!m||m.id!=='ci') return null;
  const qRaw=numStrict($('q').value), L=numStrict($('len').value), dv=curDv();
  if(isNaN(qRaw)||isNaN(dv)||dv<=0||isNaN(L)) return null;
- const wear=(document.querySelector('input[name=wear]:checked')||{}).value||'old';
+ const wear=(rad('wear')||{}).value||'old';
  const r=shevCalc({mat:'ci',wear:wear,dv_mm:dv,q:qRaw,qunit:$('qunit').value,L:L,
    k:0,mest:false,nu:numStrict($('nu').value),rho:numStrict($('rho').value),mode:$('mode').value});
  if(!r.ok) return null;
@@ -37,9 +37,9 @@ function ciHelpIntro(){
   '  <div class="drow"><span class="dsym">λ</span><span>— коэффициент сопротивления трения по длине;</span></div>',
   '  <div class="drow"><span class="dsym"><i>v</i></span><span>— средняя скорость потока, м/с;</span></div>',
   '  <div class="drow"><span class="dsym"><span class="nu">ν</span></span><span>— кинематическая вязкость воды, м²/с;</span></div>',
-  '  <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,81 м/с² (2g = 19,62).</span></div>',
+  '  <div class="drow"><span class="dsym"><i>g</i></span><span>— ускорение свободного падения, g = 9,80665 м/с² (2g = 19,6133).</span></div>',
   ' </div>',
-  ' <div class="hint">в программе A = 0,021/19,62 = 0,0010703…; коэффициент 0,00107 в книге — округление</div>',
+  ' <div class="hint">в программе A = 0,021/19,6133 = 0,0010703…; коэффициент 0,00107 в книге — округление</div>',
   '</div>',
   '<hr><b>Размеры чугунных труб</b><br>',
   'Внутренний диаметр чугунных труб принимается по ГОСТ 9583-75 (ГОСТ 21053-75) по данным классов ЛА, А и Б: d<sub>в</sub> = d<sub>н</sub> − 2S (d<sub>н</sub> и толщина стенки S — из таблицы класса).<br>',
@@ -51,7 +51,7 @@ function ciHelpIntro(){
 
 function ciHelpFormulas(){
  const st=ciHelpState();
- const wear=(document.querySelector('input[name=wear]:checked')||{}).value||'old';
+ const wear=(rad('wear')||{}).value||'old';
  const isNew=wear==='new', v=st?st.r.v:NaN;
  const oldHi=!!st&&!isNew&&v>=1.2, oldLo=!!st&&!isNew&&v<1.2;
  return [
@@ -89,20 +89,20 @@ function ciHelpFormulas(){
    t:'i=\\frac{\\lambda\\cdot v^2}{2g\\cdot d_p}', step: isNew?'i_new':null,
    note: isNew? 'расчёт ведётся по этой формуле: λ — из (3а)' :
      'для «неновых» труб программа применяет готовые формулы (6)/(7) — та же запись (1) с подставленными (4)/(5а); по этой формуле расчёт не ведётся — подстановка показана там',
-   p:['λ — из (3а) для новых, из (4)/(5а) для неновых труб','2g = 19,62 м/с² (константа программы)',
+   p:['λ — из (3а) для новых, из (4)/(5а) для неновых труб','2g = 19,6133 м/с² (константа программы)',
       'программа хранит A ≡ λ/(2g): i = A·v²/d<sub>p</sub><sup>e</sup>; e = 1,284 (новые) или 1,3 (неновые)']},
 
   {h:'λ — коэффициент сопротивления трения по длине, неновые трубы, квадратичная область', s:'кн. Шевелевых 1984, формула (4)',
    t:'\\lambda=\\frac{0,021}{d_p^{0,3}}', step:null,
    note:'по этой формуле расчёт не ведётся: программа не считает λ отдельно, а применяет i-форму (6), полученную подстановкой (4) в (1); ветвление — по v ≥ 1,2 м/с, а не по v/d<sub>p</sub> ≥ 9,2·10⁵ 1/м',
-   p:['0,021 — постоянная формулы (4) (кн., стр. 4)','0,021/19,62 = 0,0010703… — коэффициент A в программе (книжный 0,00107 — округление)']},
+   p:['0,021 — постоянная формулы (4) (кн., стр. 4)','0,021/19,6133 = 0,0010703… — коэффициент A в программе (книжный 0,00107 — округление)']},
 
   {h:'i — гидравлический уклон, неновые чугунные (и стальные) трубы при v ≥ 1,2 м/с', s:'кн. Шевелевых 1984, формула (6) в редакции программы',
-   t:'i=\\frac{0,021}{19,62}\\cdot\\frac{v^2}{d_p^{1,3}}', step: oldHi?'i_hi':null,
+   t:'i=\\frac{0,021}{19,6133}\\cdot\\frac{v^2}{d_p^{1,3}}', step: oldHi?'i_hi':null,
    note: oldHi? 'расчёт ведётся по этой формуле: «неновые» трубы, v ≥ 1,2 м/с' :
      (isNew? 'по этой формуле расчёт не ведётся: выбраны «новые» трубы' :
       'по этой формуле расчёт не ведётся: v < 1,2 м/с — применяется (7) (или не введены данные)'),
-   p:['0,021 — из (4); 19,62 = 2g; книга печатает i = 0,00107·v²/d<sub>p</sub><sup>1,3</sup>',
+   p:['0,021 — из (4); 19,6133 = 2g = 2·9,80665 (в EXE 2g = 19,62); книга печатает i = 0,00107·v²/d<sub>p</sub><sup>1,3</sup>',
       'программа ветвит по v ≥ 1,2 м/с, а не по v/d<sub>p</sub> ≥ 9,2·10⁵ 1/м','d<sub>p</sub> — в метрах; v — в м/с']},
 
   {h:'λ — коэффициент сопротивления трения по длине, неновые трубы, неквадратичная область', s:'кн. Шевелевых 1984, формула (5а)',
@@ -120,7 +120,7 @@ function ciHelpFormulas(){
 
   {h:'R — удельные потери давления на трение, Па/м', s:'программа «Таблицы Шевелева» (R = ρ·g·i)',
    t:'R=\\rho\\cdot g\\cdot i', step:'R',
-   p:['ρ = 1000 кг/м³ — вода t = 10 °C (на чугунной странице поля ν/ρ в окне нет, значения фиксированы)','g = 9,81 м/с²',
+   p:['ρ = 1000 кг/м³ — вода t = 10 °C (на чугунной странице поля ν/ρ в окне нет, значения фиксированы)','g = 9,80665 м/с²',
       'i — гидравлический уклон, м/м']},
 
   {h:'H — потери напора по длине, м', s:'программа «Таблицы Шевелева» (H = i·L)',
@@ -153,8 +153,8 @@ function ciHelpStep(kind){
   }
   case 'v': return N('\\frac{'+f(st.qm3,6)+'\\cdot 4}{\\pi\\cdot '+f(d,5)+'^2}', f(v,3)+' м/с');
   case 'lam_new': return N('\\frac{0,0144}{'+f(d,5)+'^{0,284}}\\cdot\\left(1+\\frac{2,36}{'+f(v,3)+'}\\right)^{0,284}', 'λ = '+f(st.lam,8));
-  case 'i_new': return N('\\frac{'+f(st.lam,8)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,81\\cdot '+f(d,5)+'}', iRes);
-  case 'i_hi': return N('\\frac{0,021}{19,62}\\cdot\\frac{'+f(v,3)+'^2}{'+f(d,5)+'^{1,3}}', iRes);
+  case 'i_new': return N('\\frac{'+f(st.lam,8)+'\\cdot '+f(v,3)+'^2}{2\\cdot 9,80665\\cdot '+f(d,5)+'}', iRes);
+  case 'i_hi': return N('\\frac{0,021}{19,6133}\\cdot\\frac{'+f(v,3)+'^2}{'+f(d,5)+'^{1,3}}', iRes);
   case 'i_lo': return N('0,000912\\cdot\\left(1+\\frac{0,867}{'+f(v,3)+'}\\right)^{0,3}\\cdot\\frac{'+f(v,3)+'^2}{'+f(d,5)+'^{1,3}}', iRes);
   case 'R': return N('1000\\cdot 9,80665\\cdot '+f(i,6), f(r.R,1)+' Па/м');
   case 'H': return N(f(L,0)+'\\cdot '+f(i,6), f(r.H,3)+' м');

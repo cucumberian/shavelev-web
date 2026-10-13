@@ -51,7 +51,7 @@ function selectMaterial(id){
 }
 function setWear(w){
   if(w!=='new'&&w!=='old') throw new Error('wear должен быть new или old');
-  document.querySelector(`input[name=wear][value=${w}]`).checked=true;
+  radVal('wear',w).checked=true;
 }
 /* Страницы без «Режима / теплоносителя»: блок убран из UI, потому что его данные не входят в
    формулы этих страниц (режим/теплоноситель нужен только стали и электросварной — там в окне
@@ -62,7 +62,7 @@ function fixedSys(){return !usesSys(currentMat().id)}
 function setPipeClass(c){
   const m=currentMat();
   if(!m.cls) throw new Error('классы (ЛА/А/Б) есть только у чугунных труб');
-  const r=document.querySelector(`input[name=cls][value="${c}"]`);
+  const r=radVal('cls',c);
   if(!r) throw new Error('класс должен быть ЛА, А или Б');
   r.checked=true; applyClsState(); fillDiameters();
 }
@@ -146,7 +146,7 @@ const TOOLS=[
     if(a.mode!==undefined && !fixedSys()){ // ci/ж/б: режимов и k нет — игнорируем
       if(!VEL_LIMIT[a.mode]) throw new Error('неизвестный режим: '+a.mode);
       const wantHot=MODE_SYS.hot.includes(a.mode);
-      const r=document.querySelector('input[name=sys][value='+(wantHot?'hot':'cold')+']');
+      const r=radVal('sys',wantHot?'hot':'cold');
       if(r.checked!==wantHot){r.checked=true;fillModes(false);}
       $('mode').value=a.mode;
       const kv=K_MODE[a.mode]; if(kv!==undefined) $('k').value=String(kv);
@@ -154,7 +154,7 @@ const TOOLS=[
     // медь (frmtablII9): Frame2 «Выбор системы» и Frame4 «Температура, °С» вместо стального режима
     if(a.cu_system!==undefined){
       {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('cu_system доступен на страницах меди, PEX и PEX-AL-PEX');}
-      const r=document.querySelector('input[name=cusys][value="'+a.cu_system+'"]');
+      const r=radVal('cusys',a.cu_system);
       if(!r) throw new Error('cu_system должен быть cold, circ, supply или heat');
       r.checked=true; spSysSync();
     }
@@ -172,7 +172,7 @@ const TOOLS=[
     if(a.nu!==undefined||a.rho!==undefined){
       if(currentMat().sMap){ // медь: ν и ρ — Frame5 «Теплоноситель»: «другой» + Text3 (ν) и Text18 (ρ)
         if(cuSysNow!=='heat') throw new Error(CU_LOCK_C);
-        document.querySelector('input[name=cool][value="other"]').checked=true;
+        radVal('cool','other').checked=true;
         if(a.nu!==undefined){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('cunu').value=String(a.nu*1e6); }
         if(a.rho!==undefined){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('curho').value=String(a.rho); }
         spHeatSync();
@@ -182,7 +182,7 @@ const TOOLS=[
       }
     }
     updDv(); // dp зависит от wear (чугун: −1 мм только у «неновых») — обновить после всех параметров
-    return textResult({ok:true,material:currentMat().id,wear:document.querySelector('input[name=wear]:checked').value,
+    return textResult({ok:true,material:currentMat().id,wear:rad('wear').value,
       pipe_class:currentMat().cls?curCls():undefined,
       dv_mm:$('dcv').value,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value,
       cu_system:spPage()?spSysVal():undefined,
@@ -225,7 +225,7 @@ const TOOLS=[
   inputSchema:{type:'object',properties:{}},
   async execute(){
     return textResult({
-      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б, стеклопластика и стекла H=i·L; g=9.81. Медь (СП 40-108-2004) — другие формулы, местные сопротивления не через k: H=i·L+V²Σξ/(2g), ΔP=R·L+Z, g=9.80665',
+      model:'i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б, стеклопластика и стекла H=i·L. Медь (СП 40-108-2004) — другие формулы, местные сопротивления не через k: H=i·L+V²Σξ/(2g), ΔP=R·L+Z. g=9.80665 — одно на всю программу, 2g=19.6133 (в оригинале было 9,80665 и 9,81, см. G в formulas.js)',
       formulas:{
         steel_new:'λ=0.0159·(1+0.684/v)^0.226/d^0.226',
         ci_new:'λ=0.0144·(1+2.36/v)^0.284/d^0.284',
@@ -235,7 +235,7 @@ const TOOLS=[
         conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19',
         plastic_pex:'i=0.000685·v^1.774/dp^1.226',
         glass:'i=0.000745·v^1.774/dp^1.226',
-        grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/19.62, e=1) — СП 40-104-2001',
+        grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/(2g), e=1) — СП 40-104-2001',
         copper_cold:'СП 40-108-2004 формула (2): i=0,0161·ν^0,25·V^1,75/d^1,25 — холодное водоснабжение и циркуляционные линии ГВС',
         copper_supply:'СП 40-108-2004 формула (3): i=0,051·((6,52·lg d+lg(Vd/ν))/(115·lg²d)+(0,66·lg d+0,1·lg(Vd/ν))/(lg(Vd/ν)·lg d))·V²/d — подающие линии ГВС',
         copper_heating:'СП 40-108-2004 формулы (5)–(9): R=λ·V²/(2d)·10³ Па/м; √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Kз)/(lg Re−1)]/lg(3,7d/Kз); Re_кз=500d/Kз; b=1+lg Re/lg Re_кз; Kз=10⁻⁵ (трубы медные)',

@@ -1,7 +1,7 @@
 /* data/registry.js — реестр материалов клона. Каждый модуль типа труб (js/data/<тип>.js) объявляет
    здесь свой материал через registerMaterial(материал). Порядок подключения в index.html:
    fmt → formulas → registry → docs → modes → модули труб (steel, steel-es, ci, asbes, plastic,
-   conc, grp, glass, pex, metal-pex, pe100) → calc → ui → webmcp.
+   plastic, pe100, conc, grp, glass, pex, metal-pex) → calc → ui → webmcp.
 
    Структура материала (общая для всех модулей). Данные сортамента хранятся в поле, отвечающем за
    форму (gas / wall / cls / vt / pe / pe100 / series / sMap / dvMap / d+dv), а ПОВЕДЕНИЕ страницы —

@@ -8,9 +8,9 @@
    Модель программы (реверс shev.exe ver 3.0):
      v = Q/(π·dp²/4)            π = 4·atan(1) (rtcAtn(1)·_DAT_004011f8); в скорость входят
                                 ТОЛЬКО расход и диаметр — ν, ρ и температура не участвуют
-     i = A·v²/dp^e, A ≡ λ/(2g)  2g = 19,62 (VA 0x4011d8); ν уже подставлена в константы A
+     i = A·v²/dp^e, A ≡ λ/(2g)  2g = 19,6133 (в EXE 19,62, VA 0x4011d8); ν уже подставлена в A
                                 (ν воды 1,3·10⁻⁶ м²/с, t = 10 °C)
-     R = ρ·g·i [Па/м]           g = 9,81; ρ влияет ТОЛЬКО на эту строку (и «потери давления, Па»)
+     R = ρ·g·i [Па/м]           g = 9,80665 (одно на всю программу); ρ влияет ТОЛЬКО на эту строку
      H = i·L·(1+k) [м]          на страницах без местных сопротивлений k ≡ 0 → H = i·L
 
    Страницы без блока «Режим / теплоноситель» (по шаблонам форм EXE: в окне нет ни «Выбор
@@ -49,8 +49,19 @@ function gradient(mat,wear,v,dp_mm,sys){
  const d=dp_mm/1000; const {A,e}=iCalc(wear,mat,v,d,sys);
  return {A,e,i:A*v*v/Math.pow(d,e)};
 }
+/* ─── удельные потери веткой материала ───
+   сталь/э/с — точные формулы EXE (ν входит: агент const-check, 10.10.2026), остальные — степенная
+   модель i = A·v²/d^e из gradient(). Одно место и для окна, и для внешнего calcLosses: копия этого
+   правила уже разводила расчёт с выводом страницы. */
+function iOf(mat,wear,v,dv_mm,nu,sys){
+ if(mat==='steel'||mat==='steel-es'){
+  const d=dv_mm/1000, i=steelI(v,d,(!isNaN(nu)&&nu>0)?nu:NU_FIX,wear);
+  return {A:i/(v*v/Math.pow(d,1.3)), e:1.3, i};
+ }
+ return gradient(mat,wear,v,dv_mm,sys);
+}
 /* ─── R = ρ·g·i (Па/м) и H = i·L·(1+k) (м) ─── */
-function pressure(i,rho){ return i*(rho||RHO_FIX)*GP } // EXE: g = 9,80665 (трассировка 10.10.2026)
+function pressure(i,rho){ return i*(rho||RHO_FIX)*G }   // g одно на программу (см. G в formulas.js)
 function head(i,L,k){ return i*L*(1+(k||0)) }
 
 /* ─── значения теплоносителя по умолчанию: вода 10 °C, как в программе ─── */
@@ -204,7 +215,7 @@ function validate(inp,E){
      inp.t    — температура из Frame4; обязательна для систем с признаком t (Frame2 ГВС);
      inp.cool — «вода»/«другой» из Frame5; ручные inp.cuNu/inp.cuRho — только для «другой»;
      inp.xiSum — Σξ из Frame6. Местные сопротивления входят ОТДЕЛЬНЫМ слагаемым, не через k:
-       H = i·L + V²·Σξ/(2g),  2g = 19,62 (DAT_004011d8 @0x51a4c8)
+       H = i·L + V²·Σξ/(2g),  2g = 19,6133 (в EXE 19,62, DAT_004011d8 @0x51a4c8)
        ΔP = R·L + Z,  Z = 0,5·ρ·V²·Σξ  (СП 40-108-2004 (10), (3.4.4))
    Признаки карты систем: cold — холодное водоснабжение (ν и ρ фиксированы программой, блоки
    «Температура»/«Теплоноситель» неактивны), t — требуется температура, heat — системы отопления
@@ -232,7 +243,7 @@ function spCalc(inp,m){
  const v=velocity(b.q,b.dv), d=b.dv/1000;
  const {i,R}=P.loss(S,nu,v,d,rho,inp.pexSp);
  const xi=isNaN(inp.xiSum)?0:inp.xiSum;
- const H=i*b.L + v*v*xi/CU.G2, Z=0.5*rho*v*v*xi, P_dP=R*b.L+Z;
+ const H=i*b.L + v*v*xi/G2, Z=0.5*rho*v*v*xi, P_dP=R*b.L+Z;
  // Строки вывода собирает движок, но ТЕКСТЫ и формат задаёт страница (page.out) — у меди и PEX
  // шаблоны форм разные, и это не косметика: живой скрин 08.10.2026 (525,819 · 326,02 · 32602,001).
  const O=P.out||{}, heat=!!S.heat;
@@ -269,10 +280,7 @@ function shevCalc(inp){
  const rho=sys?((!isNaN(inp.rho)&&inp.rho>0)?inp.rho:RHO_FIX):RHO_FIX;
 
  const v=velocity(q,dv);
- let A,e,i;
- if(mat==='steel'||mat==='steel-es'){ // точные формулы EXE: ν входит (агент const-check, 10.10.2026)
-  i=steelI(v,dv/1000,(!isNaN(inp.nu)&&inp.nu>0)?inp.nu:NU_FIX,inp.wear); A=i/(v*v/Math.pow(dv/1000,1.3)); e=1.3;
- } else { const g=gradient(mat,inp.wear,v,dv,inp.sys); A=g.A; e=g.e; i=g.i; }
+ const g=iOf(mat,inp.wear,v,dv,inp.nu,inp.sys); const A=g.A,e=g.e,i=g.i;
  const R=pressure(i,rho), H=head(i,L,k), P=R*L*(1+k);
 
  const lines=[
@@ -295,8 +303,103 @@ function shevCalc(inp){
   lines,outH,notes};
 }
 
+/* ─── ПУБЛИЧНЫЙ ВЫЗОВ В ТРИ ШАГА (без DOM: скрипты, агенты, WebMCP) ───
+   ЕДИНИЦЫ — часть контракта, переключателя единиц в аргументах НЕТ:
+     расход Q        — м³/с (СИ);
+     диаметры dу/dн/dв — мм (так считает и печатает оригинал, так же в ГОСТах и справке);
+     v — м/с, i — м/м, R — Па/м, H — м, потери давления — Па, ν — м²/с, ρ — кг/м³.
+   Перевод в СИ — отдельная функция: qToM3s(Q,'ls'|'mh') превращает л/с или м³/ч в м³/с.
+   Замысел: выбор материала отделён от физики, скорость — одна на все 12 страниц, потери — две семьи.
+     pipeDv(mat, sel, d)           слой материала: dу/dн → расчётный dв (единственный закон, page.dvOf);
+                                  sel = {S, wear, cls, vt, tip, pe, sdr, sdr100, series} — нужные поля
+     calcVelocity(dv_mm, q_m3s)   dв + расход (м³/с) → v; больше ничего не нужно — ни ν, ни ρ, ни режим
+     lossesShevelev({law,…})       потери ШЕВЕЛЕВСКОЙ семьи — от материала отвязаны, нужна строка-закон
+     lossesSP({page|mat,…})        потери СП-семейства (медь, PEX, ПЭ-AL-PEX) — нужна СП-страница
+     calcLosses({mat,…})           то же через диспетчер, если семейство знать не нужно
+   Расход можно не передавать, если скорость уже посчитана: принимается v напрямую. */
+function pipeDv(mat,sel,d){
+ const m=matOf(mat);
+ if(!m||!m.page||!m.page.dvOf) return NaN;
+ return m.page.dvOf(sel||{},+d);
+}
+/* Тот же порядок аргументов, что у низкоуровневой velocity(q, dv): расход первым. */
+function calcVelocity(dv_mm,q_m3s){ return isNaN(q_m3s)?NaN:velocity(q_m3s,dv_mm) }
+
+/* ─── ПОТЕРИ, ДВЕ СЕМЬИ ОТДЕЛЬНО ───
+   Вход и выход у них одинаковые (dв мм + скорость v м/с или расход q м³/с → i м/м, R Па/м,
+   при L м → H м и потери давления Па). Различается только то, ОТ ЧЕГО считает каждая:
+
+   1) lossesShevelev({law, …}) — ШЕВЕЛЕВСКАЯ семья (сталь, э/с, чугун, а/ц, ж/б, пластик, ПЭ 100,
+      стекло, стеклопластик): i = A·v²/d^e. Отвязана от материала полностью — достаточно СТРОКИ
+      с названием закона (те же строки, что в iCalc): 'steel'|'ci'|'asbes'|'conc'|'plastic'|'pex'
+      |'pe100'|'grp'|'glass'. Ни реестра MATERIALS, ни страницы, ни DOM: в гидравлике закон и ЕСТЬ
+      материал — у чугуна и у стали разные A и e, а сортамент тут ни при чём. ν/ρ/k в этой семье
+      есть только у закона 'steel' — как и в окне, где блок стоит лишь на стальных страницах.
+
+   2) lossesSP({page|mat, …}) — СП-СЕМЕЙСТВО (медь, PEX, ПЭ-AL-PEX): λ считается по СП, ветка
+      выбирается системой, местные сопротивления — Σξ, а не k. Отвязать от материала НЕЛЬЗЯ:
+      формула, карта систем и таблица ν/ρ лежат в данных страницы (page.loss / page.sys /
+      page.fluid) — у меди три ветки и Кэ=10⁻⁵, у PEX одна и Кэ=10⁻⁶. Поэтому принимается либо
+      page (без реестра), либо mat — id, тогда страница ищется сама.
+
+   calcLosses({mat,…}) — диспетчер для тех, кому знать семейство не нужно (окно, WebMCP):
+   смотрит признак page.kind='sp'. ν/ρ/k/xi необязательны, умолчания те же, что в окне.
+   Ни валидации текстами, ни строки рекомендации, ни предупреждений: это не shevCalc. */
+
+/* Общий разбор входа обеих функций — одна проверка, чтобы ошибки границы совпадали. */
+function lossesIn(inp){
+ const dv=inp.dv_mm;
+ if(isNaN(dv)||dv<=0) return {ok:false,error:'нужен расчётный внутренний диаметр dv_mm (см. pipeDv)'};
+ const v=(inp.v!==undefined&&!isNaN(inp.v))?inp.v:calcVelocity(dv,inp.q);
+ if(isNaN(v)||v<=0) return {ok:false,error:'нужна скорость v или расход q: по одному dв потери не считаются'};
+ const L=inp.L, hasL=!isNaN(L)&&L>0;
+ return {ok:true,v,d:dv/1000,dv,L:hasL?L:null,hasL};
+}
+function lossesShevelev(inp){
+ const law=inp.law||inp.mat;
+ if(!law) return {ok:false,error:'нужен закон: law (steel|ci|asbes|conc|plastic|pex|pe100|grp|glass)'};
+ const b=lossesIn(inp); if(!b.ok) return b;
+ const hot=law==='steel'||law==='steel-es';
+ const rho=hot?((!isNaN(inp.rho)&&inp.rho>0)?inp.rho:RHO_FIX):RHO_FIX;
+ let k=hot?(isNaN(inp.k)?0:(inp.k||0)):0;
+ if(inp.mest===false) k=0; // в окне снятая галка обнуляет k; здесь opt-out явный
+ const g=iOf(law,inp.wear,b.v,b.dv,inp.nu,inp.sys), R=pressure(g.i,rho);
+ const out=Object.assign({i:g.i,i1000:g.i*1000,A:g.A,e:g.e,R,k,rho,xi:0,law},{v:b.v,dv_mm:b.dv,L:b.L});
+ if(b.hasL) Object.assign(out,{H:head(g.i,b.L,k), P:R*b.L*(1+k)});
+ return Object.assign({ok:true},out);
+}
+function lossesSP(inp){
+ const P=inp.page||(inp.mat&&matOf(inp.mat)||{}).page;
+ if(!P||!P.loss) return {ok:false,error:'нужна СП-страница: page (или mat: copper|pex|metal-pex)'};
+ const b=lossesIn(inp); if(!b.ok) return b;
+ const map=P.sys, sys=(inp.cuSys&&map[inp.cuSys])?inp.cuSys:'cold', S=map[sys];
+ let nu=inp.cuNu, rho=inp.cuRho;
+ if(S.cold){ nu=NU_FIX; rho=RHO_FIX; }
+ else if(S.heat&&inp.cool==='other'){ // ручной теплоноситель — только для систем отопления
+  if(isNaN(nu)||nu<=0) return {ok:false,error:'Вы не ввели значение коэффициента кинематической вязкости теплоностеля'};
+  if(isNaN(rho)||rho<=0) return {ok:false,error:'Вы не ввели значение плотности тепноностеля!'};
+ } else { // «вода»: таблица страницы (page.fluid) по температуре — так же, как в окне
+  const f=P.fluid(S,isNaN(inp.t)?null:inp.t);
+  if(f){ if(isNaN(nu)) nu=f.nu; if(isNaN(rho)||rho<=0) rho=f.rho; }
+ }
+ if(isNaN(nu)||nu<=0) nu=NU_FIX;
+ if(isNaN(rho)||rho<=0) rho=RHO_FIX;
+ const {i,R}=P.loss(S,nu,b.v,b.d,rho,inp.pexSp);
+ const xi=isNaN(inp.xiSum)?0:inp.xiSum;
+ const out=Object.assign({i,i1000:i*1000,R,xi,nu,rho,sys,heat:!!S.heat},{v:b.v,dv_mm:b.dv,L:b.L});
+ if(b.hasL) Object.assign(out,{Z:0.5*rho*b.v*b.v*xi, H:i*b.L+b.v*b.v*xi/G2, P:R*b.L+0.5*rho*b.v*b.v*xi});
+ return Object.assign({ok:true},out);
+}
+/* Диспетчер: кому не нужно знать семейство — тот зовёт это (окно, WebMCP). */
+function calcLosses(inp){
+ const m=inp.mat&&matOf(inp.mat);
+ if(!m) return {ok:false,error:'неизвестный материал: '+inp.mat};
+ return (m.page&&m.page.kind==='sp')?lossesSP(inp):lossesShevelev(inp);
+}
+
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
- module.exports={fmt,fmt2,qToM3s,velocity,gradient,pressure,head,NU_FIX,RHO_FIX,spCalc,
-   NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesCu,usesK,ciLimits,speedNotes,recommendation,shevCalc};
+ module.exports={fmt,fmt2,qToM3s,velocity,gradient,iOf,pressure,head,NU_FIX,RHO_FIX,spCalc,
+   NO_SYS,NO_WEAR,matOf,usesSys,usesWear,usesCu,usesK,ciLimits,speedNotes,recommendation,shevCalc,
+   pipeDv,calcVelocity,lossesShevelev,lossesSP,calcLosses};
 }

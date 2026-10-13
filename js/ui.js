@@ -7,6 +7,18 @@
 
 const $=id=>document.getElementById(id);
 
+/* Радио-группы страницы. На каждый расчёт ui.js спрашивал у DOM по 35–40 селекторов, и почти все
+   были вида 'input[name=X]:checked' — одни и те же группы по 7–9 раз за цикл. В браузере это
+   бесплатно, в jsdom (движок CSS-селекторов) — 85–92 % времени всех UI-наборов, поэтому группы
+   кэшируем и ищем отмеченную перебором кэша (`.checked` — свойство узла, кэш не инвалидируется).
+   ИСКЛЮЧЕНИЕ: 'cusys' (Frame2 меди/PEX) и 'pn' (кнопки ПЭ 100) собираются скриптом через
+   innerHTML — их кэш сбрасывается в fillCuSys()/fillPnRadios(). */
+const _rad={};
+function radAll(name){ return _rad[name]||(_rad[name]=document.querySelectorAll('input[name='+name+']')); }
+function rad(name){ const g=radAll(name); for(const r of g) if(r.checked) return r; return null; }
+function radVal(name,val){ const g=radAll(name); for(const r of g) if(r.value===val) return r; return null; }
+function dropRad(name){ delete _rad[name]; }
+
 function fillMaterials(){
  const sel=$('material');
  sel.innerHTML='';
@@ -16,7 +28,7 @@ function currentMat(){return MATERIALS.find(m=>m.id===$('material').value);}
 
 /* Режимы участка зависят от системы (холодного/горячего водоснабжения) — как Combo3+Option5/6 */
 function fillModes(keep){
- const sys=document.querySelector('input[name=sys]:checked').value;
+ const sys=rad('sys').value;
  const sel=$('mode'); const prev=keep?sel.value:'';
  sel.innerHTML='';
  MODE_SYS[sys].forEach(id=>{const o=document.createElement('option');o.value=id;o.textContent=MODE_LABELS[id];sel.appendChild(o);});
@@ -51,7 +63,7 @@ function applySysVisibility(){
  $('rhoHint').style.display=sys?'':'none';           // «для ГВС рекомендуется t=60°C» — только где есть ГВС
  applySpVisibility(m);        // СП-страницы (медь/PEX/PEX-AL-PEX): свои блоки — Выбор системы,
                               // Температура, Теплоноситель, Местные сопротивления (page.blocks)
- document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
+ radAll('sys').forEach(r=>{r.disabled=false;});
  if(!sys){
   // блок скрыт, но значения, которые реально участвуют в расчёте, держим в полях (ν=1,3·10⁻⁶ =
   // t=10°C вшита в константы A, ρ=1000, k≡0 → H=i·L) и запоминаем, что чекбокс снят принудительно
@@ -62,7 +74,7 @@ function applySysVisibility(){
  } else {
   if($('chkMest').dataset.forced){ delete $('chkMest').dataset.forced; $('chkMest').checked=true; } // вернулись на сталь/э/с
   $('chkMest').disabled=false;$('mode').disabled=false;$('k').disabled=false;
-  const cold=document.querySelector('input[name=sys]:checked').value==='cold';
+  const cold=rad('sys').value==='cold';
   $('rho').disabled=false;
   // у стали/э-с ν входит в формулы: в ХВС это 1,3·10⁻⁶ (вода 10 °C), а не 0; у прочих страниц ν не используется
   if(cold) $('nu').value=usesSys(currentMat().id)?'1.3e-6':'0';
@@ -85,36 +97,36 @@ function applySpVisibility(m){
  // Frame2 «Выбор системы»: кнопки и подписи собираются из карты page.sys. У меди это Option1–4
  // (шаблон 0x6fb58), у PEX — Option1–3 (слоты 0x388/0x38c/0x384): порядок и подписи приходят из данных.
  const box=$('cuSysField').querySelector('.cusys');
- const prev=(document.querySelector('input[name=cusys]:checked')||{}).value;
- box.innerHTML='';
+ const prev=(rad('cusys')||{}).value;
+ box.innerHTML=''; dropRad('cusys');   // группа пересобрана — старые узлы отброшены
  Object.keys(P.sys).forEach(k=>{
   const lab=document.createElement('label');
   lab.innerHTML=`<input type="radio" name="cusys" value="${k}"${k===prev?' checked':''}> ${P.sys[k].cap}`;
   box.appendChild(lab);
  });
- if(!document.querySelector('input[name=cusys]:checked')) box.querySelector('input').checked=true;
- box.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=spSysSync);
+ if(!rad('cusys')) box.querySelector('input').checked=true;
+ radAll('cusys').forEach(r=>r.onchange=spSysSync);
  spSysSync();
 }
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
-function curCls(){const r=document.querySelector('input[name=cls]:checked');return r?r.value:'ЛА';}
+function curCls(){const r=rad('cls');return r?r.value:'ЛА';}
 /* а/ц (frmtablII4): класс трубы ВТ и тип по размерам */
-function curVt(){const r=document.querySelector('input[name=vt]:checked');return r?r.value:'ВТ6';}
-function curTip(){const r=document.querySelector('input[name=tip]:checked');return r?+r.value:1;}
+function curVt(){const r=rad('vt');return r?r.value:'ВТ6';}
+function curTip(){const r=rad('tip');return r?+r.value:1;}
 /* пластик (frmtablII5): марка полиэтилена (Option1–4) и серия SDR (Option5–13) */
-function curPe(){const r=document.querySelector('input[name=pe]:checked');return r?r.value:'32';}
-function curSdr(){const r=document.querySelector('input[name=sdr]:checked');return r?r.value:null;}
+function curPe(){const r=rad('pe');return r?r.value:'32';}
+function curSdr(){const r=rad('sdr');return r?r.value:null;}
 /* ПЭ 100 (ГОСТ Р 70628.2-2023): серия выбирается по НОМИНАЛЬНОМУ ДАВЛЕНИЮ PN — в проекте трубу
    указывают давлением, а не серией. Кнопки строит fillPnRadios() из данных страницы, value кнопки —
    id серии SDR, потому что серия и есть то, чем различаются строки сортамента. У SDR 6 (S 2,5)
    номинальное давление в стандарте не нормировано — у него подпись по серии. */
-function curPe100Sdr(){const r=document.querySelector('input[name=pn]:checked');return r?r.value:null;}
+function curPe100Sdr(){const r=rad('pn');return r?r.value:null;}
 function pe100Series(){const m=currentMat(); if(!m||!m.pe100) return null;
  const s=curPe100Sdr(); return (s&&m.pe100[s])?s:Object.keys(m.pe100)[0];}
 /* PEX (frmtablII10): серия труб (Option4/9/10/11/12). Строка сортамента [S, ΔS, Δd] для выбранного
    dн берёт страница (page.seriesRow) — раньше это знание лежало здесь, в ui.js. */
-function curPexSdr(){const r=document.querySelector('input[name=pexsdr]:checked');return r?r.value:'sdr136';}
+function curPexSdr(){const r=rad('pexsdr');return r?r.value:'sdr136';}
 function pexRow(){const P=currentMat().page; return P.seriesRow?P.seriesRow(+$('dsel').value):null;}
 
 /* Состояние блока исходных данных (frmtablII3, проверка на живой программе):
@@ -130,7 +142,7 @@ function applyClsState(){
     который надо было помнить и который молча разъезжался с остальным кодом. */
  const locked=other&&!!P.gated;
  // блоки-селекторы страницы объявлены в page.blocks: clsRow → радио name=cls, peRow → name=pe, …
- (P.blocks||[]).forEach(b=>document.querySelectorAll(`input[name=${b.replace(/Row$/,'').toLowerCase()}]`)
+ (P.blocks||[]).forEach(b=>radAll(b.replace(/Row$/,'').toLowerCase())
    .forEach(r=>r.disabled=locked));
  $('dsel').disabled=locked;
  $('dcv').disabled=!other;
@@ -142,20 +154,20 @@ function applyClsState(){
    и есть то, чем различаются строки сортамента. */
 function fillPnRadios(){
   const P=currentMat().page; if(!P.pnList) return;
-  const box=$('pnBox'), prev=(document.querySelector('input[name=pn]:checked')||{}).value;
-  box.innerHTML='';
+  const box=$('pnBox'), prev=(rad('pn')||{}).value;
+  box.innerHTML=''; dropRad('pn');  // группа пересобрана — старые узлы отброшены
   P.pnList().forEach(({sid,label})=>{
    const lab=document.createElement('label');
    lab.innerHTML=`<input type="radio" name="pn" value="${sid}"${sid===prev?' checked':''}> ${label}`;
    box.appendChild(lab);
   });
-  if(!box.querySelector('input[name=pn]:checked')){
+  if(!rad('pn')){
    // по умолчанию — PN 10 (SDR 17): именно этот размер приводит сам стандарт в примере
    // условного обозначения трубы для воды (раздел 13, «ПЭ 100 ВОДА SDR 17 63 × 3,8»)
-   const d=box.querySelector('input[name=pn][value="17"]')||box.querySelector('input[name=pn]');
+   const d=radVal('pn','17')||radAll('pn')[0];
    if(d) d.checked=true;
   }
-  box.querySelectorAll('input[name=pn]').forEach(r=>r.onchange=()=>fillDiameters());
+  radAll('pn').forEach(r=>r.onchange=()=>fillDiameters());
 }
 
 /* Таблица размеров выбранной серии (страница ПЭ 100): dн, e (номинальная толщина стенки) и
@@ -226,9 +238,9 @@ function fillDiameters(){
  // и её переключатели гасятся по марке (frmtablII5: Option5–13).
  if(P.pickSeries){
   const s=P.pickSeries(st,+$('dsel').value);
-  if(s!==st.sdr){ const r=document.querySelector(`input[name=sdr][value="${s}"]`); if(r) r.checked=true; }
+  if(s!==st.sdr){ const r=radVal('sdr',s); if(r) r.checked=true; }
   const ok=P.seriesEnabled(st);
-  document.querySelectorAll('input[name=sdr]').forEach(r=>r.disabled=!ok.has(r.value));
+  radAll('sdr').forEach(r=>r.disabled=!ok.has(r.value));
   st=pageState();
  }
  fillSel($('dsel'), P.rows(st), P.keepNearest);
@@ -240,10 +252,10 @@ function fillDiameters(){
  // Класс/тип, которого нет в сортаменте при текущем типе (а/ц: ВТ15 при типе 1 — программа прячет
  // радиокнопку целиком, а не гасит). Правило объявлено в данных страницы, DOM трогаем здесь.
  if(P.hiddenVt){
-  const h=P.hiddenVt, r=document.querySelector(`input[name=vt][value="${h.value}"]`);
+  const h=P.hiddenVt, r=radVal('vt',h.value);
   const hide=st.tip===h.tip;
   if(r){ r.closest('label').style.display=hide?'none':''; r.disabled=hide;
-         if(hide&&r.checked) document.querySelector(`input[name=vt][value="${h.fallback}"]`).checked=true; }
+         if(hide&&r.checked) radVal('vt',h.fallback).checked=true; }
  }
  const L=P.labels||DEF_LABELS;
  $('dLabel').textContent=L.d; $('dvLabel').textContent=L.dv;
@@ -335,7 +347,7 @@ function pageState(){
    sdr100:curPe100Sdr(),                                  // ПЭ 100: серия (кнопки «PN»)
    series:curPexSdr(),                                    // PEX: серия труб
    S:t?parseFloat(t.value):NaN,                           // стенка S, мм (сталь/э-с/медь)
-   wear:(document.querySelector('input[name=wear]:checked')||{}).value,
+   wear:(rad('wear')||{}).value,
   };
 }
 
@@ -361,8 +373,8 @@ function readForm(){
  const m=currentMat();
  return {
   mat:m.id,
-  sys:(document.querySelector('input[name=sys]:checked')||{}).value,
-  wear:(document.querySelector('input[name=wear]:checked')||{}).value,
+  sys:(rad('sys')||{}).value,
+  wear:(rad('wear')||{}).value,
   dv_mm:curDv(),
   q:numStrict($('q').value), qunit:$('qunit').value,
   L:numStrict($('len').value),
@@ -426,8 +438,8 @@ function showHelp(){
 function spPage(){ const m=currentMat(); return (m&&m.page&&m.page.kind==='sp')?m:null }
 function xiRows(){ const m=spPage(); if(m&&m.page.xi) return m.page.xi;
                    const any=MATERIALS.find(x=>x.page&&x.page.xi); return any?any.page.xi:[]; }
-function spSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
-function spCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
+function spSysVal(){ const r=rad('cusys'); return r?r.value:'cold' }
+function spCool(){ const r=rad('cool'); return r?r.value:'water' }
 /* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
    Перед каждой подписью — мини-схема сопротивления (XI_PICS, js/data/xi-pics.js). */
 function xiPic(label){
@@ -483,8 +495,8 @@ function spSysSync(){
  $('tcombo').disabled=!tActive;
  $('cuTField').classList.toggle('off',!tActive);   // весь блок выглядит неактивным
  $('cuHeatField').classList.toggle('off',!coolActive);
- document.querySelectorAll('input[name=cool]').forEach(r=>r.disabled=!coolActive);
- if(!coolActive) document.querySelector('input[name=cool][value=water]').checked=true;
+ radAll('cool').forEach(r=>r.disabled=!coolActive);
+ if(!coolActive) radVal('cool','water').checked=true;
  if(!tActive) $('tcombo').value='';
  $('cuTHint').textContent   = tActive ? '' : 'в оригинале блок неактивен: вода ν = 1,3·10⁻⁶ м²/с, ρ = 1000 кг/м³';
  $('cuCoolHint').textContent= coolActive ? '' : (tActive
@@ -526,15 +538,15 @@ function setDocLinks(m){
 fillMaterials();
 $('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!m.page.gated)$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
 $('dsel').onchange=fillDiameters;
-document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
-document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
-document.querySelectorAll('input[name=pe]').forEach(r=>r.onchange=fillDiameters); // пластик: марка ПЭ → список dн и доступность SDR
-document.querySelectorAll('input[name=sdr]').forEach(r=>r.onchange=fillDiameters); // пластик: серия SDR → список dн и dв
-document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.onchange=fillDiameters); // PEX: серия SDR → список dн и dв
+radAll('cls').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
+[...radAll('vt'),...radAll('tip')].forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
+radAll('pe').forEach(r=>r.onchange=fillDiameters); // пластик: марка ПЭ → список dн и доступность SDR
+radAll('sdr').forEach(r=>r.onchange=fillDiameters); // пластик: серия SDR → список dн и dв
+radAll('pexsdr').forEach(r=>r.onchange=fillDiameters); // PEX: серия SDR → список dн и dв
 $('tsel').onchange=()=>{updDv();updDu();};
 $('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updDu();
  if(currentMat().pe100) renderPeTable(pe100Series());}; // ПЭ 100: «другой» гасит таблицу размеров
-document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм у «неновых» при любом dу (живые точки 13.10.2026)
+radAll('wear').forEach(r=>r.onchange=updDv); // чугун: −1 мм у «неновых» при любом dу (живые точки 13.10.2026)
 $('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;
  if(!on){ $('k').value='0'; }                                 // 10.10.2026: не оставляем пусто — 0 (иначе подстановка в справке вырождается в NaN)
  else { const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); } // включаем — k снова по режиму (0,3 и т. п.)
@@ -581,8 +593,8 @@ if(usesSys(currentMat().id)){ $('nuRow').style.display='none'; $('rhoRow').style
 applySysVisibility(); // чугунная страница: скрыть система/режим/местные/k, зафиксировать ν/ρ (t=10°C)
 syncK(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
 fillXiGrid();
-document.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=spSysSync); // Frame2 Option1–4
-document.querySelectorAll('input[name=cool]').forEach(r=>r.onchange=spHeatSync);  // Frame5 вода/другой
+radAll('cusys').forEach(r=>r.onchange=spSysSync); // Frame2 Option1–4
+radAll('cool').forEach(r=>r.onchange=spHeatSync);  // Frame5 вода/другой
 $('tcombo').onchange=spHeatSync;                                                  // Combo3 50…90 °C
 $('xiGrid').onchange=xiShow; $('xiother').onchange=xiShow; $('xiotherval').oninput=xiShow;
 $('xiReset').onclick=xiResetAll;

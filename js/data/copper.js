@@ -71,9 +71,9 @@ MAT_COPPER.page={
   // Ветку выбирают признаки карты систем: heat — отопление, formula:3 — (3), иначе (2).
   // g на этой странице 9,80665, НЕ 9,81 (@0x5191ea/0x51a7a4/0x51a8be).
   loss(S,nu,v,d,rho){
-    if(S.heat){ const R=cuR5(nu,v,d); return {i:R/(rho*CU.GC), R} }
+    if(S.heat){ const R=cuR5(nu,v,d); return {i:R/(rho*G), R} }
     const i=(S.formula===3)?cuI3(nu,v,d):cuI2(nu,v,d);
-    return {i, R:i*rho*CU.GC};
+    return {i, R:i*rho*G};
   },
   // ν и ρ для теплоносителя «вода» по температуре из Frame4: строки Таблицы 5 СП для t = 5…20 °C
   // (1,52·10⁻⁶; 1,01·10⁻⁶) в EXE нет, поэтому при t<50 возвращаем null — тогда и UI, и движок
