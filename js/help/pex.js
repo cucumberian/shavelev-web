@@ -2,7 +2,7 @@
    раздел «Расчёты» — формулы в порядке вычисления, подстановка текущих данных и результат.
    Контракт — js/help.js (registerHelp/renderCalcHelp), рендер формул — js/tex.js (LaTeX: KaTeX,
    иначе встроенный мини-рендер). Числа берутся тем же движком, что и расчёт страницы
-   (js/calc.js → pexCalc, js/formulas.js → pexLambda/pexLambdaSP), из тех же полей, поэтому
+   (js/calc.js → spCalc → page.loss, js/formulas.js → pexLambda/pexLambdaSP), из тех же полей, поэтому
    подстановка совпадает с выводом страницы.
    Обе формулы λ (СП 41-109-2005 (4) и формула программы, где множитель lg(3,7d_p/К_{\\text{э}}) в коде
    сокращён) показаны рядом; числа подставляются только в ту, по которой идёт расчёт, —
@@ -17,12 +17,12 @@
 function pexHelpSp(){ return !!($('pexSp')&&$('pexSp').checked); }
 
 /* Состояние расчёта страницы PEX: читаем ровно те же контролы, что ui.js (calc()), и считаем тем же
-   движком (shevCalc → pexCalc), поэтому все подставляемые числа равны выводу страницы. */
+   движком (shevCalc → spCalc), поэтому все подставляемые числа равны выводу страницы. */
 function pexHelpState(){
  const m=currentMat(); if(!m||m.id!=='pex') return null;
  const qRaw=numStrict($('q').value), L=numStrict($('len').value), dv=curDv();
  if(isNaN(qRaw)||isNaN(dv)||dv<=0||isNaN(L)) return null;
- const sys=cuSysVal(), t=numStrict($('tcombo').value), cool=cuCool(), sp=pexHelpSp();
+ const sys=spSysVal(), t=numStrict($('tcombo').value), cool=spCool(), sp=pexHelpSp();
  const r=shevCalc({mat:'pex',q:qRaw,qunit:$('qunit').value,dv_mm:dv,L:L,
    cuSys:sys,xiSum:xiTotal(),t:t,cool:cool,
    cuNu:numStrict($('cunu').value)*1e-6,cuRho:numStrict($('curho').value),pexSp:sp});

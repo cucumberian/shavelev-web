@@ -156,18 +156,18 @@ const TOOLS=[
       {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('cu_system доступен на страницах меди, PEX и PEX-AL-PEX');}
       const r=document.querySelector('input[name=cusys][value="'+a.cu_system+'"]');
       if(!r) throw new Error('cu_system должен быть cold, circ, supply или heat');
-      r.checked=true; cuSysSync();
+      r.checked=true; spSysSync();
     }
     // при Option1 «холодного водоснабжения» Frame4/Frame5 в оригинале неактивны: ν=1,3·10⁻⁶, ρ=1000
     // активность блоков как в frmtablII9: cold — оба неактивны; circ/supply — только «Температура»;
     // ручной теплоноситель (ν/ρ) — только в «системы отопления»
-    const cuSysNow = currentMat().id==='copper' ? cuSysVal() : null;
+    const cuSysNow = spPage() ? spSysVal() : null;
     const CU_LOCK_T='на медной странице блок «Температура» неактивен при «холодного водоснабжения»: ν=1,3·10⁻⁶ м²/с, ρ=1000 кг/м³ (как в оригинале)';
     const CU_LOCK_C='на медной странице блок «Теплоноситель» неактивен кроме «системы отопления»: ν и ρ подставляются по температуре';
     if(a.t_c!==undefined){
       {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('t_c доступен на страницах меди, PEX и PEX-AL-PEX');}
       if(cuSysNow==='cold') throw new Error(CU_LOCK_T);
-      $('tcombo').value=String(a.t_c); cuHeatSync();   // по t программа подставляет ν и ρ (пороги 50/60/70/80/90)
+      $('tcombo').value=String(a.t_c); spHeatSync();   // по t программа подставляет ν и ρ (пороги 50/60/70/80/90)
     }
     if(a.nu!==undefined||a.rho!==undefined){
       if(currentMat().sMap){ // медь: ν и ρ — Frame5 «Теплоноситель»: «другой» + Text3 (ν) и Text18 (ρ)
@@ -175,7 +175,7 @@ const TOOLS=[
         document.querySelector('input[name=cool][value="other"]').checked=true;
         if(a.nu!==undefined){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('cunu').value=String(a.nu*1e6); }
         if(a.rho!==undefined){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('curho').value=String(a.rho); }
-        cuHeatSync();
+        spHeatSync();
       } else {
         if(a.nu!==undefined && !fixedSys()){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
         if(a.rho!==undefined && !fixedSys()){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
@@ -185,7 +185,7 @@ const TOOLS=[
     return textResult({ok:true,material:currentMat().id,wear:document.querySelector('input[name=wear]:checked').value,
       pipe_class:currentMat().cls?curCls():undefined,
       dv_mm:$('dcv').value,mode:$('mode').value,nu:$('nu').value,rho:$('rho').value,
-      cu_system:currentMat().sMap?cuSysVal():undefined,
+      cu_system:spPage()?spSysVal():undefined,
       t_c:currentMat().sMap?$('tcombo').value:undefined,
       cu_nu:currentMat().sMap?$('cunu').value:undefined,
       cu_rho:currentMat().sMap?$('curho').value:undefined,

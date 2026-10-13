@@ -65,7 +65,7 @@ registerHelp('metal-pex', {
  step(kind){
   var q=numStrict($('q').value), dv=numStrict($('dcv').value), Ln=numStrict($('len').value);
   if(isNaN(q)||isNaN(dv)||dv<=0||isNaN(Ln)) return '';
-  var sp=$('pexSp') && $('pexSp').checked, sys=cuSysVal();
+  var sp=$('pexSp') && $('pexSp').checked, sys=spSysVal();
   var nu=1.3, rho=1000;
   if(sys!=='cold' && $('cunu') && $('cunu').value!=='') nu=numStrict($('cunu').value);
   if($('curho') && $('curho').value!=='') rho=numStrict($('curho').value);

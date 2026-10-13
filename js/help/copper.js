@@ -2,7 +2,7 @@
    раздел «Расчёты» — формулы в порядке вычисления, подстановка текущих данных и результат.
    Контракт — js/help.js (registerHelp/renderCalcHelp), рендер формул — js/tex.js (LaTeX: KaTeX,
    иначе встроенный мини-рендер). Числа берутся тем же движком, что и расчёт страницы
-   (js/calc.js → copperCalc, js/formulas.js → cuI2/cuI3/cuLambda/cuR5), из тех же полей,
+   (js/calc.js → spCalc → page.loss, js/formulas.js → cuI2/cuI3/cuLambda/cuR5), из тех же полей,
    поэтому подстановка совпадает с выводом страницы.
    Источники: СП 40-108-2004 (docs/sp40-108-2004/sp40-108-2004.md — формулы (1)–(10), Таблица 5,
    Приложение А; картинки 4293854652.files/x001…x015); константы EXE FUN_00515500
@@ -11,12 +11,12 @@
 "use strict";
 
 /* Состояние расчёта медной страницы: читаем ровно те же контролы, что ui.js (calc()), и считаем тем
-   же движком (shevCalc → copperCalc), поэтому все подставляемые числа равны выводу страницы. */
+   же движком (shevCalc → spCalc), поэтому все подставляемые числа равны выводу страницы. */
 function copperHelpState(){
  const m=currentMat(); if(!m||m.id!=='copper') return null;
  const qRaw=numStrict($('q').value), L=numStrict($('len').value), dv=curDv();
  if(isNaN(qRaw)||isNaN(dv)||dv<=0||isNaN(L)) return null;
- const sys=cuSysVal(), t=numStrict($('tcombo').value), cool=cuCool();
+ const sys=spSysVal(), t=numStrict($('tcombo').value), cool=spCool();
  const r=shevCalc({mat:'copper',q:qRaw,qunit:$('qunit').value,dv_mm:dv,L:L,
    cuSys:sys,xiSum:xiTotal(),t:t,cool:cool,
    cuNu:numStrict($('cunu').value)*1e-6,cuRho:numStrict($('curho').value)});
@@ -57,8 +57,8 @@ function copperHelpIntro(){
    Порядок вычисления: Q → d → v → ν → i(2)/i(3) → Re_{\\text{ф}}(7) → Re_{\\text{кв}}(8) → b(9) → λ(6) → R(5) →
    H(1) → Z(10) → ΔP(4). Формулы ветки, по которой расчёт не ведётся, показываются без чисел. */
 function copperHelpFormulas(){
- const m=currentMat(), sys=cuSysVal();
- const cap=(m&&m.cuSys&&m.cuSys[sys])?m.cuSys[sys].cap:sys;
+ const m=currentMat(), sys=spSysVal();
+ const cap=(m&&m.page.sys&&m.page.sys[sys])?m.page.sys[sys].cap:sys;
  const coldCirc=(sys==='cold'||sys==='circ'), supply=(sys==='supply'), heat=(sys==='heat');
  const st=copperHelpState();
  const v=st?st.r.v:NaN;

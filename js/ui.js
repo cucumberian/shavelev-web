@@ -49,7 +49,8 @@ function applySysVisibility(){
  $('hLegend').textContent=usesK(id)?'Потери напора на участке, м':'Потери напора по длине, м';
  $('nuT').style.display='none';                    // подсказка «t=10°C (как в программе)» была у заблокированного блока
  $('rhoHint').style.display=sys?'':'none';           // «для ГВС рекомендуется t=60°C» — только где есть ГВС
- applyCopperVisibility(id);   // медная страница: свои блоки (Выбор системы/Температура/Теплоноситель/Местные)
+ applySpVisibility(m);        // СП-страницы (медь/PEX/PEX-AL-PEX): свои блоки — Выбор системы,
+                              // Температура, Теплоноситель, Местные сопротивления (page.blocks)
  document.querySelectorAll('input[name=sys]').forEach(r=>{r.disabled=false;});
  if(!sys){
   // блок скрыт, но значения, которые реально участвуют в расчёте, держим в полях (ν=1,3·10⁻⁶ =
@@ -69,34 +70,31 @@ function applySysVisibility(){
  }
 }
 
-/* Медная страница (frmtablII9 «для медных труб СП40-108-2004»): стального блока «Режим /
-   теплоноситель», режима и k на ней НЕТ; вместо них — Frame2 «Выбор системы» (Option1–4),
-   Frame4 «Температура, °С» (Combo3: 50,60,70,80,90), Frame5 «Теплоноситель» (Option7 «вода» /
-   Option8 «другой» + Text18 ρ + Text3 ν) и Frame6 «Местные сопротивления» (Check1–12 + Text5–17
-   «шт.», Check14 «другие» + Text17, Label11 «Sx=», Command4 «Сброс»). */
-function applyCopperVisibility(id){
- const m=MATERIALS.find(x=>x.id===id);
- const cu = usesCu(id);   // карта m.ui.cu из данных страниц (copper/pex/metal-pex)
- ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=cu?'':'none');
- // на этих страницах нет ни режима, ни k, ни «учесть местные» (Frame6 с ξ вместо этого)
- if(cu){ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none'); }
- if(cu){
-  // Frame2 «Выбор системы»: у меди Option1–4 (шаблон 0x6fb58), у PEX Option1–3 (слоты 0x388
-  // «холодного водоснабжения», 0x38c «горячего водоснабжения», 0x384 «отопления») — набор кнопок
-  // и подписи пересобираются по данным материала
-  const map = id==='copper' ? m.cuSys : m.pexSys;
-  const box=$('cuSysField').querySelector('.cusys');
-  const prev=(document.querySelector('input[name=cusys]:checked')||{}).value;
-  box.innerHTML='';
-  Object.keys(map).forEach(k=>{
-   const lab=document.createElement('label');
-   lab.innerHTML=`<input type="radio" name="cusys" value="${k}"${k===prev?' checked':''}> ${map[k].cap}`;
-   box.appendChild(lab);
-  });
-  if(!document.querySelector('input[name=cusys]:checked')) box.querySelector('input').checked=true;
-  box.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=cuSysSync);
-  cuSysSync();
- }
+/* СП-страница (медь frmtablII9, PEX frmtablII10, PEX-AL-PEX): стального блока «Режим / теплоноситель»,
+   режима и k на ней НЕТ — вместо них свои рамки Frame2 «Выбор системы», Frame4 «Температура, °С»
+   (Combo3 50…90), Frame5 «Теплоноситель» (вода/другой + ν и ρ) и Frame6 «Местные сопротивления»
+   (Check1–12 + Text5–17 «шт.», Check14 «другие», Label11 «Sx=», Command4 «Сброс»).
+   Что показывать и какие кнопки строить — объявляет страница: page.blocks, page.sys, page.xi.
+   Здесь только DOM; ни одного имени материала в коде нет. */
+function applySpVisibility(m){
+ const P=m.page, sp=(P.kind==='sp');
+ ['cuSysField','cuTField','cuHeatField','xiField'].forEach(r=>$(r).style.display=sp?'':'none');
+ if(!sp) return;
+ // на этих страницах нет ни режима, ни k, ни «учесть местные» — вместо них редактор ξ (Frame6)
+ ['sysRow','mestRow','modeRow','kRow'].forEach(r=>$(r).style.display='none');
+ // Frame2 «Выбор системы»: кнопки и подписи собираются из карты page.sys. У меди это Option1–4
+ // (шаблон 0x6fb58), у PEX — Option1–3 (слоты 0x388/0x38c/0x384): порядок и подписи приходят из данных.
+ const box=$('cuSysField').querySelector('.cusys');
+ const prev=(document.querySelector('input[name=cusys]:checked')||{}).value;
+ box.innerHTML='';
+ Object.keys(P.sys).forEach(k=>{
+  const lab=document.createElement('label');
+  lab.innerHTML=`<input type="radio" name="cusys" value="${k}"${k===prev?' checked':''}> ${P.sys[k].cap}`;
+  box.appendChild(lab);
+ });
+ if(!document.querySelector('input[name=cusys]:checked')) box.querySelector('input').checked=true;
+ box.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=spSysSync);
+ spSysSync();
 }
 
 /* Класс чугунной трубы (frmtablII3: Option3=ЛА, Option4=А, Option7=Б) */
@@ -114,317 +112,168 @@ function curSdr(){const r=document.querySelector('input[name=sdr]:checked');retu
 function curPe100Sdr(){const r=document.querySelector('input[name=pn]:checked');return r?r.value:null;}
 function pe100Series(){const m=currentMat(); if(!m||!m.pe100) return null;
  const s=curPe100Sdr(); return (s&&m.pe100[s])?s:Object.keys(m.pe100)[0];}
-/* PEX (frmtablII10): серия труб (Option4/9/10/11/12) и строка сортамента [S, ΔS, Δd] для dн */
+/* PEX (frmtablII10): серия труб (Option4/9/10/11/12). Строка сортамента [S, ΔS, Δd] для выбранного
+   dн берёт страница (page.seriesRow) — раньше это знание лежало здесь, в ui.js. */
 function curPexSdr(){const r=document.querySelector('input[name=pexsdr]:checked');return r?r.value:'sdr136';}
-function pexRow(){const m=currentMat(); if(!m.series) return null;
- const s=m.series.find(x=>x.id===curPexSdr())||m.series[0]; return s.t[+$('dsel').value]||null;}
+function pexRow(){const P=currentMat().page; return P.seriesRow?P.seriesRow(+$('dsel').value):null;}
 
 /* Состояние блока исходных данных (frmtablII3, проверка на живой программе):
    «другой» свободен при любом классе/dу; при включении блокируется весь блок —
    классы, селектор dу, строка dн/S/dв; dp — ручной ввод. Вызывается при смене
    материала/класса/чекбокса. */
 function applyClsState(){
- const m=currentMat();
- const other=$('danother').checked;
- // чугун «другой» (frmtablII3), пластик «не по ГОСТу» (frmtablII5), ж/б «другой» (ГОСТ 12586.0-83)
- // и стеклопластик «другой» (СП40-104-2001): выбор по списку блокируется, dp — ручной ввод
- const gated=!!(m.cls||m.pe||m.pe100||m.sMap||m.series||m.id==='conc'||m.id==='grp'||m.id==='glass');
- document.querySelectorAll('input[name=cls]').forEach(r=>r.disabled=other&&!!m.cls);
- document.querySelectorAll('input[name=pe],input[name=sdr]').forEach(r=>r.disabled=other&&!!m.pe);
- document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.disabled=other&&!!m.series);
- document.querySelectorAll('input[name=pn]').forEach(r=>r.disabled=other&&!!m.pe100);
- $('dsel').disabled=other&&gated;
+ const P=currentMat().page, other=$('danother').checked;
+ /* Флажок «другой» (frmtablII3 чугун, frmtablII5 пластик «не по ГОСТу», ГОСТ 12586.0-83 ж/б,
+    СП 40-104-2001 стеклопластик, медь/PEX/стекло): список диаметров и переключатели страницы
+    гаснут, dв — ручной ввод. Гасит ли это — решает страница (page.gated), а не перечень полей
+    в UI: раньше здесь стоял список m.cls||m.pe||m.pe100||m.sMap||m.series||conc||grp||glass,
+    который надо было помнить и который молча разъезжался с остальным кодом. */
+ const locked=other&&!!P.gated;
+ // блоки-селекторы страницы объявлены в page.blocks: clsRow → радио name=cls, peRow → name=pe, …
+ (P.blocks||[]).forEach(b=>document.querySelectorAll(`input[name=${b.replace(/Row$/,'').toLowerCase()}]`)
+   .forEach(r=>r.disabled=locked));
+ $('dsel').disabled=locked;
  $('dcv').disabled=!other;
- // «другой» на странице ПЭ 100 гасит таблицу размеров так же, как гасил бы выпадающий список
- if($('peTableField')) $('peTableField').classList.toggle('off',other&&!!m.pe100);
+ if($('peTableField')) $('peTableField').classList.toggle('off',locked&&!!P.table);
 }
 
-/* Кнопки «Номинальное давление» страницы ПЭ 100 (ГОСТ Р 70628.2-2023): строятся из данных страницы,
-   а не из разметки. Порядок — от большего давления к меньшему; у SDR 6 (S 2,5) номинальное давление
-   стандартом не нормировано, поэтому подпись у него — сама серия. value кнопки = id серии SDR. */
+/* Кнопки «Номинальное давление» страницы ПЭ 100 (ГОСТ Р 70628.2-2023): список и подписи приходят
+   из данных страницы (page.pnList), здесь только DOM. value кнопки = id серии SDR, потому что серия
+   и есть то, чем различаются строки сортамента. */
 function fillPnRadios(){
- const m=currentMat(); if(!m||!m.pe100) return;
- const box=$('pnBox'), prev=(document.querySelector('input[name=pn]:checked')||{}).value;
- const pnOf=sid=>{const p=m.pe100[sid].pn; return p?parseFloat(String(p).replace(',','.')):-1;};
- const order=Object.keys(m.pe100).sort((a,b)=>pnOf(b)-pnOf(a));
- box.innerHTML='';
- order.forEach(sid=>{
-  const ser=m.pe100[sid];
-  const lab=document.createElement('label');
-  lab.innerHTML=`<input type="radio" name="pn" value="${sid}"${sid===prev?' checked':''}> ${ser.pn?('PN '+ser.pn):('SDR '+sid)}`;
-  box.appendChild(lab);
- });
- if(!box.querySelector('input[name=pn]:checked')){
-  // по умолчанию — PN 10 (SDR 17): именно этот размер приводит сам стандарт в примере
-  // условного обозначения трубы для воды (раздел 13, «ПЭ 100 ВОДА SDR 17 63 × 3,8»)
-  const d=box.querySelector('input[name=pn][value="17"]')||box.querySelector('input[name=pn]');
-  if(d) d.checked=true;
- }
- box.querySelectorAll('input[name=pn]').forEach(r=>r.onchange=()=>fillDiameters());
+  const P=currentMat().page; if(!P.pnList) return;
+  const box=$('pnBox'), prev=(document.querySelector('input[name=pn]:checked')||{}).value;
+  box.innerHTML='';
+  P.pnList().forEach(({sid,label})=>{
+   const lab=document.createElement('label');
+   lab.innerHTML=`<input type="radio" name="pn" value="${sid}"${sid===prev?' checked':''}> ${label}`;
+   box.appendChild(lab);
+  });
+  if(!box.querySelector('input[name=pn]:checked')){
+   // по умолчанию — PN 10 (SDR 17): именно этот размер приводит сам стандарт в примере
+   // условного обозначения трубы для воды (раздел 13, «ПЭ 100 ВОДА SDR 17 63 × 3,8»)
+   const d=box.querySelector('input[name=pn][value="17"]')||box.querySelector('input[name=pn]');
+   if(d) d.checked=true;
+  }
+  box.querySelectorAll('input[name=pn]').forEach(r=>r.onchange=()=>fillDiameters());
 }
 
-/* Таблица размеров выбранной серии: dн, e (номинальная толщина стенки) и dв = dн − 2e.
-   Строка выбранного диаметра подсвечена, клик по строке выбирает диаметр — это и есть замена
-   выпадающему списку: видно весь ряд серии сразу, а не одно значение. */
+/* Таблица размеров выбранной серии (страница ПЭ 100): dн, e (номинальная толщина стенки) и
+   dв = дн − 2e. Строка выбранного диаметра подсвечена, клик по строке выбирает диаметр — это и
+   есть замена выпадающему списку: видно весь ряд серии сразу, а не одно значение. Содержимое
+   приходит из page.table(sid). */
 function renderPeTable(sid){
- const m=currentMat(), ser=m.pe100[sid], body=$('peTableBody');
- if(!ser||!body) return;
- const cur=$('dsel').value, off=$('danother').checked;
- const dns=Object.keys(ser.dn).map(Number).sort((a,b)=>a-b);
- $('peTableCap').innerHTML=(ser.pn
-   ? `Серия <b>SDR ${sid}</b> (S ${ser.s}) — номинальное давление <b>PN ${ser.pn}</b>`
-   : `Серия <b>SDR ${sid}</b> (S ${ser.s}) — номинальное давление стандартом не нормировано`)
-  +` · диаметры ${dns[0]}…${dns[dns.length-1]} мм, всего ${dns.length}`;
- body.innerHTML='';
- dns.forEach(dn=>{
-  const e=ser.dn[dn][0], tr=document.createElement('tr');
-  tr.className=(String(dn)===cur?'sel ':'')+(off?'off':'');
-  tr.innerHTML=`<td>${dn}</td><td>${fmt(e,1)}</td><td>${fmt(dn-2*e,1)}</td>`;
-  tr.onclick=()=>{ if($('danother').checked) return; $('dsel').value=String(dn); fillDiameters(); };
-  body.appendChild(tr);
- });
- // выбранная строка может оказаться ниже видимой части (у SDR 21 — 34 размера): подводим её к окну,
- // иначе не видно, какой диаметр выбран. block:'nearest' не дёргает страницу целиком.
- const selRow=body.querySelector('tr.sel');
- if(selRow&&typeof selRow.scrollIntoView==='function') selRow.scrollIntoView({block:'nearest'});
+  const P=currentMat().page, body=$('peTableBody');
+  if(!P.table||!body) return;
+  const {cap,rows}=P.table(sid);
+  const cur=$('dsel').value, off=$('danother').checked;
+  $('peTableCap').innerHTML=cap;
+  body.innerHTML='';
+  rows.forEach(r=>{
+   const tr=document.createElement('tr');
+   tr.className=(String(r.dn)===cur?'sel ':'')+(off?'off':'');
+   tr.innerHTML=`<td>${r.dn}</td><td>${r.e}</td><td>${r.dv}</td>`;
+   tr.onclick=()=>{ if($('danother').checked) return; $('dsel').value=String(r.dn); fillDiameters(); };
+   body.appendChild(tr);
+  });
+  // выбранная строка может оказаться ниже видимой части (у SDR 21 — 34 размера): подводим её к окну,
+  // иначе не видно, какой диаметр выбран. block:'nearest' не дёргает страницу целиком.
+  const selRow=body.querySelector('tr.sel');
+  if(selRow&&typeof selRow.scrollIntoView==='function') selRow.scrollIntoView({block:'nearest'});
 }
 
-/* Заполнение списка диаметров; выбор диаметра/стенки сохраняется при пересборке. */
-function fillDiameters(){
- const m=currentMat(); const sel=$('dsel');
+/* ─── страница целиком: списки, подписи, поля ─────────────────────────────────────────────────
+   Здесь больше НЕТ лестницы «if (m.gas) … else if (m.pe100) …»: всё, что раньше разбиралось
+   по форме данных материала, страница теперь объявляет сама (js/data/<id>.js → m.page).
+   До 13.10.2026 один только fillDiameters() был 90 строк if/else if плюс 30 строк хардкода
+   подписей, и та же форма данных опознавалась здесь, в curDv(), в dpOf() и в applyClsState().
+
+   Что страница объявляет:
+     blocks    — какие блоки-селекторы (clsRow/vtRow/…) она показывает; остальные скрыты;
+     labels    — подписи строк d / t / dv (t отсутствует, если поля толщины стенки нет);
+     otherCap  — подпись флажка «другой» (у пластика — «не по ГОСТу»);
+     rows(st)  — строки списка диаметров как [значение, подпись];
+     wallRows  — стенки для выбранного диаметра (нет поля — null);
+     dvOf(st,d)— ★ закон расчётного диаметра (см. pageState());
+     gated     — гасит ли «другой» выбор по списку;
+     hideDsel / keepNearest — частности ПЭ 100 (список скрыт, при смене серии берётся ближайший dн). */
+const PAGE_BLOCKS=['clsRow','vtRow','tipRow','peRow','sdrRow','pexSdrRow','pexSpRow','pnRow','peTableField'];
+// Подписи по умолчанию — на случай страницы без своего page.labels: лучше нейтральный текст,
+// чем подписи от предыдущего материала.
+const DEF_LABELS={d:'Диаметр:', t:'Толщина стенки, мм:', dv:'Расчётный внутренний диаметр dp, мм:'};
+
+/* Заполнение <select> строками [значение, подпись]. Прежний выбор сохраняется, если он есть в
+   новом списке; nearest (страница ПЭ 100) — если нет, берётся ближайший меньший. */
+function fillSel(sel,rows,nearest){
  const prev=sel.value;
  sel.innerHTML='';
- $('clsRow').style.display=m.cls?'':'none';
- $('vtRow').style.display='none'; $('tipRow').style.display='none'; // селекторы а/ц — только на своей странице
- $('peRow').style.display='none'; $('sdrRow').style.display='none'; // блоки пластика — только на своей странице
- $('pexSdrRow').style.display='none'; $('pexSpRow').style.display='none'; // рамка «Серия труб» PEX — только на своей странице
- $('pnRow').style.display='none'; $('peTableField').style.display='none'; $('dRow').style.display=''; // блоки ПЭ 100 — только на своей странице
- $('dpOtherCap').textContent=m.pe?'не по ГОСТу':'другой'; // Check1 frmtablII5 озаглавлен иначе, чем «другой» прочих страниц
- if(m.gas){
-   // frmtablII1: dн → связанная стенка S → dp = dн − 2s − 1
-   m.gas.dn.forEach(d=>{
-     const o=document.createElement('option');
-     o.value=String(d); o.textContent=`dн=${fmt(d,1)} мм`;
-     sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   const t=$('tsel'); const prevT=t.value; t.innerHTML='';
-   (m.gas.s[sel.value]||[]).forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=fmt(s,2);t.appendChild(o);});
-   if(prevT && [...t.options].some(o=>o.value===prevT)) t.value=prevT;
-   $('thicknessRow').style.display='';
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('tLabel').textContent='Толщина стенки S, мм:';
-   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
-   $('dpOther').style.display='';
- } else if(m.id==='asbes'){
-   // frmtablII4: радио ВТ6–ВТ15 + комбо dу + радио «Тип 1–3»; dв — из таблицы ГОСТ 539-80.
-   // При Тип 1 программа ВТ15 ПРЯЧЕТ целиком (живой кадр ac_v15_tip1: подписи нет вовсе,
-   // 0 тёмных пикселей против 71 при Тип 2/3), а не гасит её: в ГОСТ 539-80 табл. 2 класса
-   // ВТ15 нет вообще, так что здесь программа и стандарт совпадают. Прежняя запись «у ВТ15
-   // только тип 2» неверна — при Тип 3 ВТ15 видна и выбирается (ac_v15_tip3), см. данные.
-   $('vtRow').style.display=''; $('tipRow').style.display='';
-   const t15=document.querySelector('input[name=vt][value="ВТ15"]');
-   const hide15=curTip()===1;
-   t15.closest('label').style.display=hide15?'none':'';
-   t15.disabled=hide15;
-   if(t15.disabled&&t15.checked)document.querySelector('input[name=vt][value="ВТ6"]').checked=true;
-   const vt=curVt(),tip=curTip();
-   m.vt.filter(v=>v.items.some(it=>it[0]===vt&&it[1]===tip)).forEach(v=>{
-    const o=document.createElement('option');
-    o.value=String(v.du); o.textContent=`dу=${v.du} мм`;
-    sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   $('thicknessRow').style.display='none';
- } else if(m.pe){
-   // frmtablII5 (скрины 05.10.2026 + ГОСТ 18599-2001 табл.1–4): марка ПЭ + серия SDR + комбо dн.
-   // Доступность серии — только по марке (матрица живой программы); список dн — строки выбранной серии
-   // (подтверждено из программы: MRS3.2+SDR21 → 32,40,50,63,75,90,110,125,140,160); dв = dн − 2·e ном.
-   $('peRow').style.display=''; $('sdrRow').style.display='';
-   $('thicknessRow').style.display='none';
-   const g=m.pe[curPe()];
-   const dnPrev=+prev||null;
-   let sdr=curSdr();
-   if(!sdr||!g[sdr]){ // серия недопустима для новой марки — берём первую допустимую (предпочитая с текущей dн)
-     sdr=null;
-     const rs=[...document.querySelectorAll('input[name=sdr]')].filter(r=>g[r.value]);
-     for(const r of rs) if(dnPrev&&g[r.value][dnPrev]!==undefined){sdr=r.value;break;}
-     if(!sdr&&rs.length)sdr=rs[0].value;
-     const r=document.querySelector('input[name=sdr][value="'+sdr+'"]');if(r)r.checked=true;
-   }
-   document.querySelectorAll('input[name=sdr]').forEach(r=>{r.disabled=!g[r.value];});
-   const col=g[sdr]||{};
-   Object.keys(col).map(Number).sort((a,b)=>a-b).forEach(dn=>{
-     const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
- } else if(m.pe100){
-   // ГОСТ Р 70628.2-2023 (страница клона; в оригинале её нет). Выбор построен от PN, а размеры
-   // показаны ТАБЛИЦЕЙ целиком: видно весь ряд серии сразу, диаметр выбирается кликом по строке.
-   // Источник — табл. 1 и 2 стандарта (docs/gost-r-70628-2023), dв = dн − 2·e_min.
-   $('pnRow').style.display=''; $('peTableField').style.display=''; $('dRow').style.display='none';
-   $('thicknessRow').style.display='none';
-   fillPnRadios();
-   const sid=pe100Series(), ser=m.pe100[sid], col=ser.dn;
-   const dns=Object.keys(col).map(Number).sort((a,b)=>a-b);
-   dns.forEach(dn=>{const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
-   // при смене серии сохраняем диаметр, если он есть в новой; иначе — ближайший меньший
-   if(prev && dns.includes(+prev)) sel.value=prev;
-   else { const below=dns.filter(x=>x<=+prev); sel.value=String(below.length?below[below.length-1]:dns[0]); }
-   renderPeTable(sid);
- } else if(m.series){
-   // frmtablII10 PEX (СП 41-109-2005 табл. 1): рамка «Серия труб» — Option4 «SDR 13,6 (S6,3)»,
-   // Option9 «SDR 11 (S5)», Option10 «SDR 9 (4)», Option11 «SDR 7,4 (S3,2)», Option12 «SDR 6 (2,5)»;
-   // комбо dн пересобирается (Clear 0x1e8 + AddItem 0x1ec): 0x5340e0 → 16…110 (10 значений),
-   // 0x5312b0 и 0x534920 → 12,16,18,20,22,25…110 (13), 0x531910 и 0x531fd0 → 12,15,16…110 (14).
-   // Это ровно строки табл. 1, где для выбранной серии есть S (у SDR 13,6 прочерк у 12, 15, 18, 22;
-   // у SDR 11 и SDR 9 — у 15).
-   $('pexSdrRow').style.display='';
-   $('thicknessRow').style.display='none';
-   const col=(m.series.find(s=>s.id===curPexSdr())||m.series[0]).t;
-   // null — строка табл. 1 без толщины для этой серии (у SDR 13,6 это 12, 15, 18, 22): в комбо
-   // программы их нет (AddItem 0x5340e0 даёт ровно 16…110)
-   Object.keys(col).filter(dn=>col[dn]).map(Number).sort((a,b)=>a-b).forEach(dn=>{
-    const o=document.createElement('option');o.value=String(dn);o.textContent=`dн=${dn} мм`;sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
- } else if(m.sMap){
-   // frmtablII9 медь (СП 40-108-2004): комбо dн (20 значений, FUN_00510a20) → комбо толщин S
-   // (FUN_00512ce0, 20 групп в порядке dн) → dв = dн − 2S (FUN_005148a0)
-   m.d.forEach(d=>{const o=document.createElement('option');o.value=String(d);o.textContent=`dн=${fmt(d,1)} мм`;sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   const t=$('tsel'); const prevT=t.value; t.innerHTML='';
-   (m.sMap[sel.value]||[]).forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=fmt(s,2);t.appendChild(o);});
-   if(prevT && [...t.options].some(o=>o.value===prevT)) t.value=prevT;
-   $('thicknessRow').style.display='';
- } else if(m.cls){
-   // frmtablII3: ОДИН список dу для всех классов из duList программы (14 шт; 450/700/900 нет),
-   // выбор сохраняется при смене класса; dp — из таблицы класса (см. curDv).
-   const dus=m.duList||[...new Set(Object.values(m.cls).flatMap(t=>Object.keys(t).map(Number)))].sort((a,b)=>a-b);
-   dus.forEach(du=>{const o=document.createElement('option');o.value=du;o.textContent=`dу=${du} мм`;sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   $('thicknessRow').style.display='none';
-  } else {
-   if(m.id==='metal-pex') $('pexSpRow').style.display=''; // у PEX-AL-PEX тоже доступен вариант СП
-   m.d.forEach((d,i)=>{
-     const o=document.createElement('option');
-     // wall-материалы (электросварка): d — наружный, dв=d−2s считается по выбранной стенке
-     // dvMap (стекло): в комбо НАРУЖНЫЙ dн, dв подставляет программа по таблице (скрин 93 → 81)
-     const dv=m.dvMap? m.dvMap[d] : ((m.wall||m.dvSame)? d : m.dv[i]);
-     o.value=m.dvMap? d : dv;
-     o.textContent=(m.wall||m.dvMap)? `dн=${d} мм` : (m.dvSame?`dв=${d} мм`:`dу/dн=${d} мм (dв=${dv} мм)`);
-     sel.appendChild(o);});
-   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
-   const showWall = !!m.wall;
-   $('thicknessRow').style.display=showWall?'':'none';
-   if(showWall){
-     const t=$('tsel'); const prevT=t.value; t.innerHTML='';
-     const dval=parseFloat(sel.value);
-     (m.wall[String(dval)]||[]).forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;t.appendChild(o);});
-     if(prevT && [...t.options].some(o=>o.value===prevT)) t.value=prevT;
-   }
+ if(rows) for(const [v,t] of rows){const o=document.createElement('option');o.value=String(v);o.textContent=t;sel.appendChild(o);}
+ if(prev!=='' && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+ else if(nearest && prev!==''){
+  const below=[...sel.options].map(o=>+o.value).filter(x=>isFinite(x)&&x<=+prev);
+  if(below.length) sel.value=String(below[below.length-1]);
  }
- if(m.wall){ // frmtablII2: подписи как у газовых (dн/S/dp + «другой»), но без dу и типа труб
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('tLabel').textContent='Толщина стенки S, мм:';
-   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
-   $('dpOther').style.display='';
- } else if(m.sMap){ // frmtablII9 медь: рамка «Диаметр трубы, мм» — dн + S + dв + «другой» (Check13)
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('tLabel').textContent='Толщина стенки S, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
- } else if(m.series){ // frmtablII10 PEX: dн + dв (подставляет программа) + «другой dв» (Check13 0x300)
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
-   $('pexSpRow').style.display=''; // галка «считать по формуле (4) СП»
+}
+
+function fillDiameters(){
+ const m=currentMat(), P=m.page;
+ PAGE_BLOCKS.forEach(r=>{const e=$(r); if(e) e.style.display='none';});
+ if(m.pe100) fillPnRadios();        // кнопки PN строятся из данных страницы (fillPnRadios), и без
+                                   // них не выбрана серия — список dн был бы пуст
+ if(m.pe100) renderPeTable(pe100Series());   // таблица размеров выбранной серии (клик по строке выбирает dн)
+ let st=pageState();
+ // Пластик: серия может стать недопустимой после смены марки — страница выбирает допустимую,
+ // и её переключатели гасятся по марке (frmtablII5: Option5–13).
+ if(P.pickSeries){
+  const s=P.pickSeries(st,+$('dsel').value);
+  if(s!==st.sdr){ const r=document.querySelector(`input[name=sdr][value="${s}"]`); if(r) r.checked=true; }
+  const ok=P.seriesEnabled(st);
+  document.querySelectorAll('input[name=sdr]').forEach(r=>r.disabled=!ok.has(r.value));
+  st=pageState();
  }
- else if(m.id==='metal-pex'){ $('dLabel').textContent='Наружный диаметр dн, мм:'; $('dvLabel').innerHTML='Внутренний диаметр dв, мм:'; $('dpOther').style.display=''; }
- else if(m.cls){ // frmtablII3: чугун — dу + «другой», без стенки
-   $('dLabel').textContent='Условный проход dу, мм:';
-   $('tLabel').textContent='Толщина стенки, мм:';
-   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
-   $('dpOther').style.display='';
- } else if(m.id==='asbes'){ // frmtablII4: dу + dв + «Другой» (помогает флажок из справки)
-   $('dLabel').textContent='Условный проход dу, мм:';
-   // Подпись ровно как рамка оригинала: «Внутренний диаметр, мм» — без «dp» (живые кадры
-   // ac_du150_vt12_t1 и др.). В оригинале шапка его таблицы результатов печатает «d= <номинальный dу>»
-   // (не dв); клон выводит результаты текстом, такой шапки у него нет — это различие структуры, не баг.
-   $('dvLabel').innerHTML='Внутренний диаметр, мм:';
-   $('dpOther').style.display='';
-  } else if(m.pe){ // frmtablII5: dн + dв + «не по ГОСТу» (Check1, 0x5fcfe)
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
-  } else if(m.pe100){ // ГОСТ Р 70628.2-2023: dн + dв (табл. 2), флажок «другой» — ручной dв
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
-  } else if(m.dvMap){ // frmtablII8 стекло (скрин 07.10.2026): рамка «Диаметр, мм» — комбо dн,
-   // предзаполненное dв из таблицы программы, флажок «другой» + окно ручного dp
-   $('dLabel').textContent='Наружный диаметр dн, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dв, мм:';
-   $('dpOther').style.display='';
-  } else if(m.id==='conc'||m.id==='grp'){ // ж/б (скрин 06.10.2026) и стеклопластик (скрин 07.10.2026):
-   // рамка «Внутренний диаметр, мм» + комбо d (= dв), флажок «другой» и окно ручного dp
-   // («…установите флажок "другой" и в окно ввода введите … расчетного внутреннего диаметра» — справки)
-   $('dLabel').textContent='Внутренний диаметр, мм:';
-   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
-   $('dpOther').style.display='';
-  } else if(!m.gas){ // подписи строк — общие (для газовой страницы заданы выше)
-   $('dLabel').textContent='Диаметр:';
-   $('tLabel').textContent='Толщина стенки, мм:';
-   $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
-   $('dpOther').style.display='none';
+ fillSel($('dsel'), P.rows(st), P.keepNearest);
+ const wall=P.wallRows ? P.wallRows(st, +$('dsel').value) : null;
+ fillSel($('tsel'), wall && wall.map(s=>[s, fmt(s,2)]));
+ $('thicknessRow').style.display=wall?'':'none';
+ (P.blocks||[]).forEach(r=>{const e=$(r); if(e) e.style.display='';});
+ $('dRow').style.display=P.hideDsel?'none':'';
+ // Класс/тип, которого нет в сортаменте при текущем типе (а/ц: ВТ15 при типе 1 — программа прячет
+ // радиокнопку целиком, а не гасит). Правило объявлено в данных страницы, DOM трогаем здесь.
+ if(P.hiddenVt){
+  const h=P.hiddenVt, r=document.querySelector(`input[name=vt][value="${h.value}"]`);
+  const hide=st.tip===h.tip;
+  if(r){ r.closest('label').style.display=hide?'none':''; r.disabled=hide;
+         if(hide&&r.checked) document.querySelector(`input[name=vt][value="${h.fallback}"]`).checked=true; }
  }
+ const L=P.labels||DEF_LABELS;
+ $('dLabel').textContent=L.d; $('dvLabel').textContent=L.dv;
+ if(L.t) $('tLabel').textContent=L.t;
+ $('dpOtherCap').textContent=P.otherCap||'другой';
+ $('dpOther').style.display='';
  updDv();
-  updDu();
-  updCiDims();
-}
-/* Строка «наружный dн= / толщина стенки S= / внутренний dв=» (frmtablII3, Label16/17/18) */
-function updCiDims(){
- const m=currentMat(), row=$('ciDims');
- if(!m.cls){row.style.display='none';$('ciDimsLine').textContent='';return;}
- row.style.display='';
- const du=+$('dsel').value;
- const t=m.cls[curCls()][du]||[du,0];
- $('ciDimsLine').innerHTML=`наружный dн=${fmt(t[0],1)} мм<br>толщина стенки S=${fmt(t[1],2)} мм<br>внутренний dв=${fmt(t[0]-2*t[1],1)} мм`;
- row.classList.toggle('dimmed',$('danother').checked);
-}
-function findDByDv(m,dv){
- if(m.wall||m.gas||m.dvMap) return dv; // у wall/gas/dvMap-материалов dsel.value уже = dн
- for(let i=0;i<m.d.length;i++) if(m.dv[i]===dv) return m.d[i];
- return m.d[0];
+ updDu();
 }
 function updDv(){
- const m=currentMat();
- if((m.gas||m.wall||m.cls||m.pe||m.sMap||m.series||m.dvMap||m.id==='asbes'||m.id==='conc'||m.id==='grp') && $('danother').checked) return; // ручной dp — поле не трогаем
+ if($('danother').checked) return;          // ручной dв — поле не трогаем (во всех 12 страницах)
  const dv=curDv();
  $('dcv').value=isNaN(dv)?'':fmt(dv,2);
 }
 
-/* dу и тип труб по dн/s — как в программе (Label13 «Диаметр условного прохода dу=» +
-   строки «трубы легкие/обыкновенные/усиленные» 0x4418a0/c0/ec). dу — Таблица 1 кн. Шевелева;
-   «обыкновенная» стенка — по книжному dв (у 21.3/26.8 из четырёх — 2,8) */
-/* Местные сопротивления у газовых стальных труб: при dу ≥ 80 (dн ≥ 88,5 по ГОСТ 3262-75)
-   программа отключает галочку «учесть потери на местные сопротивления» — местные не учитываются
-   (живое наблюдение 10.10.2026; на малых диаметрах галочка доступна). */
+/* Блок местных сопротивлений гаснется ПО ДИАМЕТРУ, а не по системе: с порога страницы строки
+   «учесть потери…», «Режим» и k ИСЧЕЗАЮТ (живые скрины dн=88,5 ВГП и dн=88 э/с: в рамке остаётся
+   только «Длина участка L=»). Порог свой у каждой страницы и объявлен в её данных
+   (page.mestLimit — dу ≥ 80 у водогазопроводных, dн ≥ 88 у электросварных; живые пробы 12.10.2026).
+   Флаги disabled держим теми же — на них опирается остальной код и тесты. */
 function applyMestLimit(){
- const m=currentMat(); if(!m) return;
- const cb=$('chkMest'); if(!cb) return;
- // Порог — по диаметру, и он разный на двух стальных страницах (живые пробы 12.10.2026):
- // ВГП frmtablII11: dу ≥ 80 (dн ≥ 88,5); электросварные frmtablII2: dн ≥ 88 (dн=76 — галочка
- // есть, dн=88 и 89 — нет). Правило НЕ по расчётному dp: при dн=89, S=5 (dp=79) галочки тоже нет.
- let off;
- if(m.gas){ const dy=m.gas.du[$('dsel').value]; off=(dy!==undefined && dy>=80); }
- else if(m.mestDn!==undefined){ const dn=parseFloat($('dsel').value); off=(!isNaN(dn) && dn>=m.mestDn); }
- else return;
+ const P=currentMat().page, cb=$('chkMest');
+ if(!P.mestLimit||!cb) return;
+ const off=P.mestLimit(pageState(), +$('dsel').value);
  const wasOff=cb.dataset.mestOff==='1';
  if(off!==wasOff){
   cb.dataset.mestOff=off?'1':'0';
-  if(off){                                                // уходим в зону порога: помним галочку И значение k
+  if(off){                                                 // уходим в зону порога: помним галочку И значение k
    cb.dataset.mestRemembered=cb.checked?'1':'0';
-   cb.dataset.mestKPrev=$('k').value;                     // в т.ч. введённый вручную 0 — не подменяем на k режима
+   cb.dataset.mestKPrev=$('k').value;                      // в т.ч. введённый вручную 0 — не подменяем на k режима
   } else if(cb.dataset.mestRemembered!==undefined){
    cb.checked=(cb.dataset.mestRemembered!=='0'); delete cb.dataset.mestRemembered;
    if(cb.dataset.mestKPrev!==undefined){ $('k').value=cb.dataset.mestKPrev; delete cb.dataset.mestKPrev; }
@@ -435,29 +284,30 @@ function applyMestLimit(){
    if(cb.checked && $('k').value===''){ const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); }
   }
  }
- // В оригинале строки не затемняются, а ИСЧЕЗАЮТ (живые скрины dн=88,5 ВГП и dн=88 э/с:
- // в рамке «Потери напора на участке, м» остаётся только «Длина участка L=»). Флаги disabled
- // держим теми же — на них опирается остальной код и тесты.
  ['mestRow','modeRow','kRow'].forEach(r=>{ const e=$(r); if(e) e.style.display=off?'none':''; });
  cb.disabled=off;
  if(off){
-  cb.checked=false; $('k').value='0';                     // местные не учитываются
+  cb.checked=false; $('k').value='0';                      // местные не учитываются
   $('mode').disabled=true; $('k').disabled=true;
  } else {
   const on=cb.checked;
   $('mode').disabled=!on; $('k').disabled=!on;
  }
 }
+
+/* Две строки под селектором диаметра, которые показывают не все страницы:
+   «Диаметр условного прохода dу= … трубы лёгкие/обыкновенные/усиленные» (Label13 + строки
+   0x4418a0/c0/ec, водогазопроводная сталь) и «наружный dн / толщина S / внутренний dв»
+   (Label16/17/18, чугун). Текст и признак «показывать ли строку» приходят из данных страницы. */
 function updDu(){
- const m=currentMat(), el=$('duLine');
- el.parentElement.style.display=m.gas?'':'none'; // у прочих материалов строки dу нет
- if(!m.gas){el.textContent=''; if(m.mestDn!==undefined) applyMestLimit(); return;}
- const dn=$('dsel').value, dy=m.gas.du[dn];
- if(dy===undefined){el.textContent='';return;}
- const w=m.gas.s[dn]||[], s=parseFloat($('tsel').value);
- const ord=m.gas.ord[dn]!==undefined?m.gas.ord[dn]:w[1];
- const typ=s===ord?'обыкновенные':(s===Math.max(...w)?'усиленные':'легкие');
- el.textContent=`Диаметр условного прохода dу=${dy}\nтрубы ${typ}`;
+ const P=currentMat().page, st=pageState(), d=+$('dsel').value;
+ const el=$('duLine');
+ if(P.duLine){ el.parentElement.style.display=''; el.textContent=P.duLine(st,d); }
+ else{ el.parentElement.style.display='none'; el.textContent=''; }
+ const row=$('ciDims'), line=$('ciDimsLine');
+ if(P.ciDims){ row.style.display=''; line.innerHTML=P.ciDims(st,d); }
+ else{ row.style.display='none'; line.textContent=''; }
+ row.classList.toggle('dimmed',$('danother').checked);
  applyMestLimit();
 }
 
@@ -469,82 +319,33 @@ function numStrict(s){
  if(!/^-?\d+(\.\d+)?([eE][+-]?\d+)?$/.test(s)) return NaN;
  return parseFloat(s);
 }
+/* Состояние страницы — единственный мост между DOM и чистыми функциями материала
+   (js/data/<id>.js → m.page). Контролы читаются здесь ОДИН раз и складываются в обычный объект;
+   дальше страница сама решает, как из выбранных значений получается расчётный диаметр.
+   До 13.10.2026 закон «как считать dв» был написан в ui.js ДВАЖДЫ — curDv() для выбранного
+   значения и dpOf() для рядов строки рекомендации; эти копии разошлись на пороге 300 мм у чугуна
+   (коммит v0.2.2). Теперь это один m.page.dvOf(st, d), а две точки вызова различаются только тем,
+   как получают d (выбранное значение #dsel против элемента ряда рекомендации). */
+function pageState(){
+  const t=$('tsel');
+  return {
+   cls:curCls(),                                          // чугун: класс ЛА/А/Б
+   vt:curVt(), tip:curTip(),                              // а/ц: класс ВТ и тип по размерам
+   pe:curPe(), sdr:curSdr(),                              // пластик: марка ПЭ и серия SDR
+   sdr100:curPe100Sdr(),                                  // ПЭ 100: серия (кнопки «PN»)
+   series:curPexSdr(),                                    // PEX: серия труб
+   S:t?parseFloat(t.value):NaN,                           // стенка S, мм (сталь/э-с/медь)
+   wear:(document.querySelector('input[name=wear]:checked')||{}).value,
+  };
+}
+
+/* Расчётный внутренний диаметр ВЫБРАННОГО значения. Флажок «другой» (ручной ввод) разбирается
+   здесь, а не в m.page.dvOf: тот считает по таблице всегда и обслуживает также ряды строки
+   рекомендации, где ручного ввода не бывает. */
 function curDv(){
- const m=currentMat();
- if(m.series){ // frmtablII10 PEX: Combo1_Click FUN_00522aa0 → Text2 (слот 0x304). На каждый
-   // диаметр в EXE лежат (S, ΔS, Δd) из табл. 1 СП 41-109 (dн=16 и SDR 13,6 → 1,3; 0,4; 0,3),
-   // арифметика 0x5263e9…0x5264ca (int 2 @0x5263f4, int 4 @0x526457, 0,5 @0x526437) →
-   // dв = 0,5(2dн + Δd − 4S − 2ΔS) = dн − 2S − ΔS + Δd/2 = 16 − 2,6 − 0,4 + 0,15 = 13,15 — ровно
-   // как в оригинале (живые показания 08.10.2026, «другой dв» снят: dн=16, SDR 13,6 → dв=13,15,
-   // v=22,089, i=34,505; dн=110, SDR 13,6 → dв=93,2, v=2,932, i=0,098). Прежняя запись
-   // dн − 2(S+ΔS) + Δd/2 давала 12,75 и 92,1; показание 12,75 было ручным «другой dв».
-   if($('danother').checked) return numStrict($('dcv').value);   // Check13 «другой dв»
-   const r=pexRow(); if(!r) return NaN;
-   return +$('dsel').value - 2*r[0] - r[1] + r[2]/2;   // dн − 2S − ΔS + Δd/2
-  }
- if(m.sMap){ // frmtablII9 медь: dв = dн − 2S (FUN_005148a0: fld S → fadd st(0),st(0) → __vbaVarSub(dн, 2S)
-             // @0x514aa6 → формат с «,» (0x441884/0x44188c) → Text2 (слот 0x54c) @0x514b56)
-   if($('danother').checked) return numStrict($('dcv').value);
-   const dn=parseFloat($('dsel').value), s=parseFloat($('tsel').value);
-   return (isNaN(dn)||isNaN(s))?NaN:dn-2*s;
-  }
- if(m.gas||m.wall){ // frmtablII1/2: dн→S→dp = dн − 2s − 1 (коррозия);
-   // порога «dн ≥ 300 мм» в программе НЕТ (живые точки 12.10.2026, электросварные:
-   // dн=325 S=4 → dp=316; dн=426 S=4 → 417; dн=530 S=20 → 489; dн=1120 S=10 → 1099,
-   // а при «новые» там же → 1100). Книжное «при диаметре более 300 мм единицу можно не
-   // отнимать» (кн. Шевелевых, печатная стр. 6) программой не реализовано.
-   if($('danother').checked) return numStrict($('dcv').value);
-   const dn=parseFloat($('dsel').value), s=parseFloat($('tsel').value);
-   if(isNaN(dn)||isNaN(s)) return NaN;
-   // «−1 мм» — только у «неновых» (живые точки 10.10.2026: «новые» dн=26,8 S=2,35 → dв=22,1;
-   // «неновые» dн=26,8 S=2,5 → dв=20,8; dн=114 S=4,5 → dв=104)
-   const oldWear=document.querySelector('input[name=wear]:checked').value==='old';
-   return dn-2*s-(oldWear?1:0);
- }
- if(m.cls){ // frmtablII3 (чугун): dв=dн−2S из таблицы класса; dp=dв−1 у «неновых» при ЛЮБОМ dу
-   if($('danother').checked) return numStrict($('dcv').value);
-   const du=+$('dsel').value;
-   const t=m.cls[curCls()][du]||[du,0]; // страховка на неполную таблицу; у всех классов EXE строки есть (16, включая dу=1000)
-   const dv=t[0]-2*t[1];
-   // Порога «dв ≤ 300» в программе НЕТ (живые точки 13.10.2026, 20 пар «новые/неновые»: dв=304,4
-   // →303,4; 503,6→502,6; 799,8→798,8; 803,6→802,6; 1003→1002; 994→993). Прежнее условие dv<=300
-   // выросло из строки VarCmpLe(…,300) в декомпиляции — это путаница Ghidra со стековыми слотами:
-   // в FUN_004b1b00 48 Variant-пар = ровно 48 толщин, ни одной «круглой» константы там нет.
-   // То же правило, что на обеих стальных страницах; см. ../AGENTS.md (раздел про чугун).
-   return dv-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);
- }
- if(m.id==='asbes'){ // frmtablII4: dв из таблицы (ВТ,тип,dу); «Другой» — ручной ввод
-   if($('danother').checked) return numStrict($('dcv').value);
-   const du=+$('dsel').value,vt=curVt(),tip=curTip();
-   const row=m.vt.find(v=>v.du===du);
-   const it=row&&row.items.find(x=>x[0]===vt&&x[1]===tip);
-   return it?it[2]:NaN;
-  }
-  if(m.pe){ // frmtablII5: dв = dн − 2e (ГОСТ 18599-2001, табл.1–4 по марке и SDR); «не по ГОСТу» — ручной dв в окно ввода
-    if($('danother').checked) return numStrict($('dcv').value);
-    const dn=+$('dsel').value,g=m.pe[curPe()],e=g[curSdr()]&&g[curSdr()][dn];
-    return e===undefined?NaN:dn-2*e;
-  }
-  if(m.pe100){ // ГОСТ Р 70628.2-2023: dв = dн − 2·e_min. В табл. 2 стандарта первое число пары —
-    // e_min, и это и есть номинальная (расчётная) стенка: допуск у стандарта только положительный
-    // (e_max = e_min + (0,1·e_min + 0,1), округлённое вверх до 0,1), так что «номинал» = e_min.
-    // Проверка: dн=110, SDR 11 → 10,0/11,1; 0,1·10+0,1 = 1,1 → 11,1 ✓ (то же значение, что
-    // «e=10,0, пред. откл. +1,1» в ГОСТ 18599-2001). «другой» — ручной dв.
-    if($('danother').checked) return numStrict($('dcv').value);
-    const dn=+$('dsel').value, ser=m.pe100[pe100Series()], e=ser&&ser.dn[dn];
-    return e===undefined?NaN:dn-2*e[0];
-  }
-  if(m.dvMap){ // frmtablII8 стекло (скрин 07.10.2026): dн из комбо → dв из таблицы программы
-                 // (93 → 81); «другой» — ручной dp (FUN_0050d4c0)
-    if($('danother').checked) return numStrict($('dcv').value);
-    return m.dvMap[+$('dsel').value];
-  }
-  if(m.id==='conc'||m.id==='grp'){ // frmtablII ж/б (скрин: d=600 → dp=600) и стеклопластик
-    // (скрин: d=60 → dp=60): dв = d из списка; «другой» — ручной dp
-    if($('danother').checked) return numStrict($('dcv').value);
-    return parseFloat($('dsel').value);
-  }
-  return parseFloat($('dsel').value);
+  const m=currentMat();
+  if($('danother').checked) return numStrict($('dcv').value);
+  return m.page.dvOf(pageState(), +$('dsel').value);
 }
 
 /* Расчёт: здесь ТОЛЬКО чтение контролов и вывод. Валидация, v, i, R, H, предупреждения и
@@ -553,8 +354,8 @@ function curDv(){
 /* Единая точка сборки входа движка: calc() берёт объект отсюда, поэтому «что видит пользователь»
    и «что считает движок» не разъезжаются. Подстановка чисел в справку (js/help/<id>.js) читает
    ровно те же контролы и зовёт тот же движок shevCalc — потому числа справки равны выводу страницы.
-   Это не «единственное чтение контролов»: ниже делегируется в curDv(), cuSysVal(),
-   xiTotal(), cuCool(), а calc() дополнительно строит dpOf — осознанно зависимые читатели, их
+   Это не «единственное чтение контролов»: ниже делегируется в curDv(), spSysVal(),
+   xiTotal(), spCool(), а calc() дополнительно строит dpOf — осознанно зависимые читатели, их
    результат обязан совпадать с тем, что вернул readForm(). */
 function readForm(){
  const m=currentMat();
@@ -570,36 +371,21 @@ function readForm(){
   mode:$('mode').value,
   selD:m.gas?m.gas.du[$('dsel').value]:+$('dsel').value,
   // медная страница (frmtablII9): система из Frame2, ξ из Frame6, ν/ρ из Frame5 (или по t из Combo3)
-  cuSys:cuSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
-  cool:cuCool(), cuNu:numStrict($('cunu').value)*1e-6, cuRho:numStrict($('curho').value),
+  cuSys:spSysVal(), xiSum:xiTotal(), t:numStrict($('tcombo').value),
+  cool:spCool(), cuNu:numStrict($('cunu').value)*1e-6, cuRho:numStrict($('curho').value),
   pexSp:!!($('pexSp') && $('pexSp').checked), // PEX: по формуле (4) СП вместо кода программы
  };
 }
 function calc(){
  const out=$('out');
  $('outH').innerHTML='—';
- const m=currentMat();
- const dpOf=(d)=>{
-   if(m.gas){const it=Object.entries(m.gas.du).find(([,u])=>u===d);if(!it)return NaN;
-     const dn=+it[0],s=parseFloat($('tsel').value);if(isNaN(s))return NaN;
-     // Тот же закон, что в curDv(): «−1 мм» (коррозия/отложения) только у «неновых», порога
-     // «dн ≥ 300 мм» в программе нет (живые точки 12.10.2026, электросварные: dн=325 S=4 → 316;
-     // dн=1120 S=10 → 1099, «новые» → 1100). У ВГП максимальный dн=165, так что там правка
-     // ничего и не меняла. Живые точки 10.10.2026: «новые» dн=26,8 S=2,35 → dв=22,1;
-     // «неновые» dн=26,8 S=2,5 → dв=20,8.
-     return dn-2*s-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
-   if(m.wall){const dn=+d,s=parseFloat($('tsel').value);if(isNaN(dn)||isNaN(s))return NaN;
-     // электросварные (frmtablII2): тот же dр = dн − 2S − 1 при любом диаметре
-     return dn-2*s-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
-   if(m.cls){const t=m.cls[curCls()][d];if(!t)return NaN;const dv=t[0]-2*t[1];
-     // чугун: dр = dв − 1 у «неновых» при любом диаметре — то же правило, что в curDv()
-     return dv-(document.querySelector('input[name=wear]:checked').value==='old'?1:0);}
-   if(m.pe){const sd=m.pe[curPe()][curSdr()];return !sd||sd[d]===undefined?NaN:d-2*sd[d];}
-   // ПЭ 100 (ГОСТ Р 70628.2-2023): тот же закон, что в curDv() — dв = dн − 2·e_min
-   if(m.pe100){const ser=m.pe100[pe100Series()],e=ser&&ser.dn[d];return !e?NaN:d-2*e[0];}
-   if(m.dvMap){const x=m.dvMap[d];return x===undefined?NaN:x;}
-   return d; // ж/б, а/ц, стеклопластик, стекло: dв = dу (или подставлен программой)
- };
+  const m=currentMat(), st=pageState();
+  /* Расчётный диаметр для ЭЛЕМЕНТА РЯДА строки рекомендации. Ряд у стали задан в dу, а #dsel этой
+     страницы хранит dн — переводит recKey (есть только у стали; у остальных страниц значение ряда
+     и есть значение #dsel). Сам закон — тот же m.page.dvOf, что и у выбранного значения: до
+     13.10.2026 здесь стояла вторая копия правила, и именно она разошлась с curDv() на пороге
+     300 мм у чугуна (коммит v0.2.2). */
+  const dpOf=(d)=>m.page.dvOf(st, m.page.recKey?m.page.recKey(d):d);
  // оригинал перед расчётом проверяет введённый коэффициент (MessageBox «Вы не ввели значение коэффициента», BSTR 0x047b70)
  if(usesK(m.id) && $('chkMest') && $('chkMest').checked && String($('k').value).trim()===''){
   out.innerHTML='<span class="warn">Вы не ввели значение коэффициента</span>'; return; }
@@ -633,9 +419,15 @@ function showHelp(){
 /* Страница меди ИЛИ PEX: обе пользуются блоками Frame4 «Температура» / Frame5 «Теплоноситель».
    Таблица ν/ρ берётся КОНКРЕТНОЙ страницы: у меди t=90 → 0,36·10⁻⁶ (DAT_00402428 @0x5166da-цепочка),
    у PEX t=90 → 0,32·10⁻⁶ (DAT_00402670 @0x527da9/@0x5281b7) — таблицы различаются на этом шаге. */
-function cuMat(){ const m=currentMat(); return m&&usesCu(m.id)?m:null } // у PEX-AL-PEX свои «Температура» и «Теплоноситель»
-function cuSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
-function cuCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
+/* СП-страница текущая: медь, PEX или PEX-AL-PEX. Признак — page.kind==='sp' (данные страницы),
+   а не имя материала. У всех трёх таблица ν/ρ своя: у меди t=90 → 0,36·10⁻⁶ (DAT_00402428
+   @0x5166da-цепочка), у PEX и PEX-AL-PEX t=90 → 0,32·10⁻⁶ (DAT_00402670 @0x527da9/@0x5281b7) —
+   таблицы различаются на этом шаге, поэтому ν/ρ берёт page.fluid(S, t) своей страницы. */
+function spPage(){ const m=currentMat(); return (m&&m.page&&m.page.kind==='sp')?m:null }
+function xiRows(){ const m=spPage(); if(m&&m.page.xi) return m.page.xi;
+                   const any=MATERIALS.find(x=>x.page&&x.page.xi); return any?any.page.xi:[]; }
+function spSysVal(){ const r=document.querySelector('input[name=cusys]:checked'); return r?r.value:'cold' }
+function spCool(){ const r=document.querySelector('input[name=cool]:checked'); return r?r.value:'water' }
 /* Frame6: Check1–12 + Text5–17 («шт.») — порядок и ξ по инициализации FUN_00515500 0x518a67–0x518c43.
    Перед каждой подписью — мини-схема сопротивления (XI_PICS, js/data/xi-pics.js). */
 function xiPic(label){
@@ -646,10 +438,12 @@ function xiPic(label){
   p.body.map(seg).join('')+p.flow.map(d=>`<path class="flow" d="${d}"/>`).join('')+`</svg>`;
 }
 function fillXiGrid(){
- /* ξ-список меди и PEX идентичен (Variant 0x529fcc…0x52a160), поэтому сетку строим один раз при
-   инициализации; на странице, где нет меди/PEX, берём медный список. */
- const m=cuMat()||MATERIALS.find(x=>x.id==='copper'), g=$('xiGrid'); g.innerHTML='';
- m.xi.forEach((row,i)=>{
+ /* Список ξ берём из данных СТРАНИЦЫ (page.xi) — у меди это Приложение А СП 40-108-2004, у PEX
+   те же 12 позиции (Variant-константы calc 0x526810 @0x529fcc…0x52a160), у PEX-AL-PEX последняя
+   позиция своя («соединение с обжимной гайкой»). На странице без ξ берём любой список — сетка всё
+   равно скрыта. */
+ const g=$('xiGrid'); g.innerHTML='';
+ xiRows().forEach((row,i)=>{
   const lab=document.createElement('label'); lab.className='xiItem';
   lab.innerHTML=`<input type="checkbox" id="xi${i}"> ${xiPic(row[0])} <span class="xiName">${row[0]}</span> <span class="hint">ξ=${fmt(row[1],1)}</span>`+
                 `<input type="number" id="xin${i}" class="w-xi" min="0" step="1" value="1"> <span class="unit">шт.</span>`;
@@ -659,9 +453,8 @@ function fillXiGrid(){
 /* Σξ = Σ ξ_i·шт. (цепочка VarMul→VarAdd 0x518c80–0x518e79); «другие ξ» (Text17/Check14)
    прибавляется последним VarAdd БЕЗ умножения */
 function xiTotal(){
- const m=cuMat(); if(!m) return 0;
  let s=0;
- m.xi.forEach((row,i)=>{
+ xiRows().forEach((row,i)=>{
   const c=$('xi'+i), n=numStrict(($('xin'+i)||{}).value||'');
   if(c && c.checked && !isNaN(n)) s+=row[1]*n;
  });
@@ -671,23 +464,22 @@ function xiTotal(){
 function xiShow(){ $('xiSum').textContent=fmt(xiTotal(),2) }   // Label11 «Sx=»
 /* «Сброс» (Command4 → FUN_0051c530): обнуляет 13 пар Text/Check (слоты 0x338…0x39c) */
 function xiResetAll(){
- const m=cuMat()||MATERIALS.find(x=>x.id==='copper');
- m.xi.forEach((row,i)=>{ $('xi'+i).checked=false; $('xin'+i).value='1'; });   // количество — по умолчанию 1 шт.
+ xiRows().forEach((row,i)=>{ $('xi'+i).checked=false; $('xin'+i).value='1'; });   // количество — по умолчанию 1 шт.
  $('xiother').checked=false; $('xiotherval').value='';
  xiShow();
 }
 
-/* Активность блоков меди — как в оригинальном окне frmtablII9:
-   «холодного водоснабжения» (Option1): Frame4 «Температура» и Frame5 «Теплоноситель» оба
-   неактивны — программа берёт воду со стандартными ν = 1,3·10⁻⁶ м²/с (DAT_00402448 @0x5166da)
-   и ρ = 1000 кг/м³; «циркуляционного» (Option2) и «подающего» (Option3) ГВС: активен только
-   Frame4 «Температура» (Combo3 50…90), по которому подставляются ν и ρ, Frame5 неактивен;
-   «системы отопления» (Option4): активны оба блока, «другой» открывает ручной ν (Text3) и ρ (Text18). */
-function cuSysSync(){
- const m=cuMat(); if(!m) return;
- const sys=cuSysVal();
- const tActive = sys!=='cold';                                    // Frame4
- const coolActive = sys==='heat';                                  // Frame5: «вода/другой» только в отоплении
+/* Активность блоков СП-страницы — как в оригинальном окне frmtablII9/frmtablII10. Что активно,
+   решают признаки выбранной системы в карте page.sys, а не имя материала:
+     cold — «холодного водоснабжения»: Frame4 «Температура» и Frame5 «Тепно��итель» оба неактивны,
+            программа берёт воду со стандартными ν = 1,3·10⁻⁶ м²/с (DAT_00402448) и ρ = 1000;
+     t    — системы ГВС: активна только Frame4 (Combo3 50…90), по ней подставляются ν и ρ;
+     heat — системы отопления: активны оба блока, «другой» открывает ручные ν (Text3) и ρ (Text18). */
+function spSysSync(){
+ const m=spPage(); if(!m) return;
+ const S=m.page.sys[spSysVal()]||m.page.sys.cold;
+ const tActive=!S.cold;          // Frame4 «Температура»
+ const coolActive=!!S.heat;      // Frame5 «Теплоноситель»: «вода/другой» только при отоплении
  $('tcombo').disabled=!tActive;
  $('cuTField').classList.toggle('off',!tActive);   // весь блок выглядит неактивным
  $('cuHeatField').classList.toggle('off',!coolActive);
@@ -698,26 +490,26 @@ function cuSysSync(){
  $('cuCoolHint').textContent= coolActive ? '' : (tActive
   ? 'в оригинале блок неактивен: ν и ρ подставляются по температуре'
   : 'в оригинале блок неактивен: вода ν = 1,3·10⁻⁶ м²/с, ρ = 1000 кг/м³');
- $('tHint').style.display=(sys==='circ'||sys==='supply'||sys==='hot')?'':'none';
- cuHeatSync();
+ spHeatSync();
 }
 
-/* «вода» (Option7): ρ и ν подставляются по температуре из Combo3 — пороги 50/60/70/80/90 °C
-   (0x516bfa…0x5176e3), ρ = 10³·{0,99;0,98;0,98;0,97;0,97}, ν = 10⁻⁶·{0,55;0,47;0,41;0,36;0,36}.
-   Строк Таблицы 5 СП для t = 5…20 °C (1,52·10⁻⁶; 1,01·10⁻⁶) в EXE нет: при t<50 или пустом t
-   программа держит ν = 1,3·10⁻⁶ (DAT_00402448 @0x5166da) и ρ = 1000. «другой» (Option8) — ρ и ν
-   из Text18/Text3 (поля разблокированы). */
-function cuHeatSync(){
- const m=cuMat(); if(!m) return;
- const water=cuCool()==='water';
+/* «вода» (Option7): ρ и ν подставляются по температуре из Combo3 — пороги 50/60/70/80/90 °C.
+   Значения берёт СТРАНИЦА (page.fluid), потому что таблицы ν/ρ у меди и PEX различаются на шаге
+   t=90, а у циркуляционного ГВС меди ν вообще не зависит от t (0,36·10⁻⁶ при любом t — живые
+   скрины 08.10.2026: t=50/60/70 → 0,36, i=0,398). page.fluid вернёт null, если строки для этой
+   температуры нет (при t<50 строк Таблицы 5 СП в EXE нет) — тогда берутся умолчания программы:
+   ν = 1,3·10⁻⁶ (DAT_00402448), ρ = 1000. «другой» (Option8) — ρ и ν из полей (они разблокированы). */
+function spHeatSync(){
+ const m=spPage(); if(!m) return;
+ const water=spCool()==='water';
  $('cunu').disabled=water; $('curho').disabled=water;
  if(water){
-  const t=numStrict($('tcombo').value);
-  const row=isNaN(t)?null:(m.t||[]).filter(r=>r.t<=t).pop(); // у страницы может не быть своей таблицы ν/ρ
-  $('cunu').value=row?(cuSysVal()==='circ'?'0.36':(row.nu*1e6).toFixed(2)):'1.3'; // медь «циркуляционный»: оригинал берёт 0,36e-6 при любом t (живые скрины 08.10.2026: t=50/60/70 → 0,36, i=0,398)
-  $('curho').value=row?String(row.rho):'1000';
+  const S=m.page.sys[spSysVal()]||m.page.sys.cold;
+  const t=numStrict($('tcombo').value), f=m.page.fluid(S,isNaN(t)?null:t);
+  $('cunu').value=f?(f.nu*1e6).toFixed(2):'1.3';
+  $('curho').value=f?String(f.rho):'1000';
  }
- $('tHint').style.display=(cuSysVal()==='circ'||cuSysVal()==='supply'||cuSysVal()==='hot')?'':'none';
+ $('tHint').style.display=(spSysVal()!=='cold')?'':'none';
 }
 
 /* Синие ссылки на документы страницы: у PEX-AL-PEX их две («СП 41-102-98» и «СП40-102-2000»),
@@ -732,7 +524,7 @@ function setDocLinks(m){
 
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!(m.cls||m.pe||m.pe100||m.series))$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
+$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!m.page.gated)$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
 $('dsel').onchange=fillDiameters;
 document.querySelectorAll('input[name=cls]').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 document.querySelectorAll('input[name=vt],input[name=tip]').forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв
@@ -740,7 +532,7 @@ document.querySelectorAll('input[name=pe]').forEach(r=>r.onchange=fillDiameters)
 document.querySelectorAll('input[name=sdr]').forEach(r=>r.onchange=fillDiameters); // пластик: серия SDR → список dн и dв
 document.querySelectorAll('input[name=pexsdr]').forEach(r=>r.onchange=fillDiameters); // PEX: серия SDR → список dн и dв
 $('tsel').onchange=()=>{updDv();updDu();};
-$('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updCiDims();
+$('danother').onchange=()=>{applyClsState();if(!$('danother').checked)updDv();updDu();
  if(currentMat().pe100) renderPeTable(pe100Series());}; // ПЭ 100: «другой» гасит таблицу размеров
 document.querySelectorAll('input[name=wear]').forEach(r=>r.onchange=updDv); // чугун: −1 мм у «неновых» при любом dу (живые точки 13.10.2026)
 $('chkMest').onchange=()=>{const on=$('chkMest').checked;$('mode').disabled=!on;$('k').disabled=!on;
@@ -752,9 +544,13 @@ $('nuPreset').onchange=e=>{if(e.target.value){const[a,b]=e.target.value.split('|
    раньше обработчики дёргали $('mode').onchange() друг из друга — скрытая цепочка, её нет. */
 function syncK(){ const kv=K_MODE[$('mode').value]; if(kv!==undefined) $('k').value=String(kv); }
 $('mode').onchange=syncK;
-const T_NU_RHO={40:['0.66e-6','1000'],45:['0.605e-6','1000'],50:['0.55e-6','1000'],55:['0.51e-6','1000'],60:['0.47e-6','1000'],65:['0.44e-6','1000'],70:['0.41e-6','1000'],75:['0.385e-6','1000'],80:['0.36e-6','1000'],85:['0.34e-6','1000'],90:['0.32e-6','1000'],95:['0.30e-6','1000']}; // ν — точная таблица EXE FUN_0047de20 (реверс 10.10.2026), ρ — книжные пресеты
-/* ν/ρ по выбранной t из поля «t = … °C» (ГВС стали); syncSteelT() — явный вызов, не $('tSteel').onchange() */
-function syncSteelT(){ const p=T_NU_RHO[$('tSteel').value]; if(p){ $('nu').value=p[0]; $('rho').value=p[1]; } }
+/* ν/ρ по выбранной t из поля «t = … °C» (ГВС стали). Таблица — в данных страницы (page.nuTable),
+   раньше стояла константой T_NU_RHO в этом файле. syncSteelT() — явный вызов, не обработчик.
+   Страница без своей таблицы (у остальных материалов поля t нет) — ничего не трогаем. */
+function syncSteelT(){
+ const P=currentMat().page, nu=P.nuTable&&P.nuTable[$('tSteel').value];
+ if(nu){ $('nu').value=nu; $('rho').value=String(P.rhoTable!==undefined?P.rhoTable:1000); }
+}
 $('tSteel').onchange=syncSteelT;
 $('sysCold').onchange=()=>{fillModes(false);syncK();
  $('tSteelRow').style.display='none'; $('nuRow').style.display='none'; $('rhoRow').style.display='none'; // в оригинале полей ν/ρ на стальной странице нет
@@ -785,9 +581,9 @@ if(usesSys(currentMat().id)){ $('nuRow').style.display='none'; $('rhoRow').style
 applySysVisibility(); // чугунная страница: скрыть система/режим/местные/k, зафиксировать ν/ρ (t=10°C)
 syncK(); // стартовое k по режиму по умолчанию (хоз-питьевой → 0,3)
 fillXiGrid();
-document.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=cuSysSync); // Frame2 Option1–4
-document.querySelectorAll('input[name=cool]').forEach(r=>r.onchange=cuHeatSync);  // Frame5 вода/другой
-$('tcombo').onchange=cuHeatSync;                                                  // Combo3 50…90 °C
+document.querySelectorAll('input[name=cusys]').forEach(r=>r.onchange=spSysSync); // Frame2 Option1–4
+document.querySelectorAll('input[name=cool]').forEach(r=>r.onchange=spHeatSync);  // Frame5 вода/другой
+$('tcombo').onchange=spHeatSync;                                                  // Combo3 50…90 °C
 $('xiGrid').onchange=xiShow; $('xiother').onchange=xiShow; $('xiotherval').oninput=xiShow;
 $('xiReset').onclick=xiResetAll;
 xiShow();
