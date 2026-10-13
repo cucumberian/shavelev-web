@@ -34,8 +34,11 @@ window.webmcp={
   getTools(){ return (window.__webmcpRegistry||[]).map(t=>({name:t.name,description:t.description,inputSchema:t.inputSchema})); },
   async executeTool(name,args){
     const t=(window.__webmcpRegistry||[]).find(x=>x.name===name);
-    if(!t) throw new Error('tool not found: '+name);
-    return t.execute(args||{});
+    // ОДИН конверт на все ошибки (рецензия 13.10.2026 §4.5): и «tool not found», и бросок из
+    // валидации приходят как {ok:false,error} — обвязке агента не нужен try/catch.
+    if(!t) return textResult({ok:false,error:'tool not found: '+name});
+    try{ return await t.execute(args||{}); }
+    catch(e){ return textResult({ok:false,error:e.message}); }
   }
 };
 
@@ -227,26 +230,67 @@ const FORMULA_TEXT={
 
 /* Расход, длина и местные сопротивления — параметры РАСЧЁТА, а не материала: именованная функция,
    потому что их задают и shev-losses, и shev-sweep (один раз на весь срез). */
-function calcInputs(a){
+function calcInputs(a,ign){
+  ign=ign||[];
   if(a.q!==undefined){ $('q').value=String(a.q); }
   if(a.qunit!==undefined){ if(!['ls','mh'].includes(a.qunit)) throw new Error('qunit: ls|mh'); $('qunit').value=a.qunit; }
   if(a.length_m!==undefined) $('len').value=String(a.length_m);
-  if(a.k!==undefined && !fixedSys()) $('k').value=String(a.k); // ci/ж/б: k выключен — поле не трогаем
-  if(a.xi_total!==undefined){ // медь (frmtablII9): Frame6 — ξ-редактор; Σξ задаём «другими ξ» (они складываются без умножения)
-    if(currentMat().id!=='copper') throw new Error('xi_total есть только на медной странице (frmtablII9)');
-    if(!(a.xi_total>=0)) throw new Error('xi_total должен быть ≥ 0');
-    $('xiother').checked=a.xi_total>0; $('xiotherval').value=String(a.xi_total); xiShow();
+  if(a.k!==undefined){
+    // Рецензия 13.10.2026 §4.1: переданный k означает «местные сопротивления учитывать» — гасим
+    // молчаливый k=0, включая галку Check2, как это делает человек. В зоне порога (сталь dу≥80,
+    // э/с dн≥88) строка скрыта оригиналом — там k не применяется, и мы об этом пишем.
+    if(fixedSys()) ign.push('k: местных сопротивлений на странице '+currentMat().id+' нет (H=i·L)');
+    else if($('k').disabled) ign.push('k: на этом диаметре местные сопротивления не учитываются (в оригинале строка скрыта)');
+    else{
+      if($('chkMest') && !$('chkMest').checked){ $('chkMest').checked=true; $('k').disabled=false; $('mode').disabled=false; }
+      $('k').value=String(a.k);
+    }
   }
+  if(a.xi_total!==undefined){ // Frame6 «Местные сопротивления» — ξ-редактор; Σξ задаём «другими ξ» (они складываются без умножения)
+    if(!currentMat().page.xi) ign.push('xi_total: ξ-редактор (Frame6) есть только у меди, PEX и PEX-AL-PEX');
+    else{
+      if(!(a.xi_total>=0)) throw new Error('xi_total должен быть ≥ 0');
+      $('xiother').checked=a.xi_total>0; $('xiotherval').value=String(a.xi_total); xiShow();
+    }
+  }
+  return ign;
 }
 
 /* Тело shev-configure — именованной функцией: ею пользуется и shev-sweep (выставить материал и
    серию один раз на весь срез), поэтому правила применения параметров живут в одном месте. */
 function configure(a){
+  // Рецензия 13.10.2026 §4.2: параметр не той страницы или неизвестное имя больше не проглатываются
+  // молча — они возвращаются в warnings/ignored ответа. Значение НЕТО (нет в ряду, ≤ 0) — по-прежнему
+  // бросок: без него агент не получит списка доступных значений.
+  const ign=[];
+  const KNOWN=['material','pe','sdr','cu_system','t_c','wear','pipe_class','wall_mm','mode','nu','rho',
+    'diameter_mm','dv_mm','q','qunit','length_m','k','xi_total','v_ms','dn','vt','tip','sp4'];
+  Object.keys(a).forEach(x=>{ if(a[x]!==undefined&&KNOWN.indexOf(x)<0)
+    ign.push('неизвестный параметр '+x+'; известны: '+KNOWN.join(', ')); });
   if(a.material!==undefined) selectMaterial(a.material);
-  if(a.pipe_class!==undefined) setPipeClass(a.pipe_class);
-  if(a.wear!==undefined) setWear(a.wear);
-  if(a.pe!==undefined) setPe(a.pe);
-  if(a.sdr!==undefined) setSdr(a.sdr);
+  if(a.pipe_class!==undefined){ currentMat().cls?setPipeClass(a.pipe_class)
+    :ign.push('pipe_class: классы ЛА/А/Б есть только у чугуна'); }
+  if(a.wear!==undefined){ currentMat().ui.wear?setWear(a.wear)
+    :ign.push('wear: блок «новые/неновые» есть только у стали, электросварных и чугуна'); }
+  if(a.pe!==undefined){ currentMat().pe?setPe(a.pe)
+    :ign.push('pe: марка ПЭ есть только у plastic'); }
+  if(a.sdr!==undefined){ const mm=currentMat();
+    (mm.pe||mm.pe100||mm.series)?setSdr(a.sdr)
+    :ign.push('sdr: выбора серии нет у материала '+mm.id); }
+  // а/ц (frmtablII4): класс ВТ и тип по размерам — от них зависят и список dу, и dв
+  if(a.vt!==undefined||a.tip!==undefined){
+    if(currentMat().id==='asbes'){
+      if(a.vt!==undefined){ const r=radVal('vt',String(a.vt));
+        if(!r) throw new Error('vt должен быть ВТ6, ВТ9, ВТ12 или ВТ15'); r.checked=true; }
+      if(a.tip!==undefined){ const r=radVal('tip',String(a.tip));
+        if(!r) throw new Error('tip должен быть 1, 2 или 3'); r.checked=true; }
+      fillDiameters();
+    } else ign.push('vt/tip: класс ВТ и тип по размерам есть только на а/ц странице');
+  }
+  // PEX/PEX-AL-PEX: галка «считать по формуле (4) СП» (меняет λ примерно на треть)
+  if(a.sp4!==undefined){ const sid=currentMat().id;
+    (sid==='pex'||sid==='metal-pex') ? ($('pexSp').checked=!!a.sp4)
+    :ign.push('sp4: галка «по формуле (4) СП» есть только у PEX и PEX-AL-PEX'); }
   if(a.diameter_mm!==undefined) setDiameter(a.diameter_mm);
   if(a.wall_mm!==undefined) setWall(a.wall_mm);
   /* dв напрямую (dv_mm) — самый естественный вопрос сантехника («посчитай при внутреннем 76 мм»).
@@ -260,6 +304,7 @@ function configure(a){
     if(row!==undefined) setDiameter(row); else{ setManualDv(a.dv_mm); dvFrom='manual'; }
     dvMatched=dvFrom==='row';
   }
+  if(a.mode!==undefined && fixedSys()) ign.push('mode: блока «Режим» на странице '+currentMat().id+' нет');
   if(a.mode!==undefined && !fixedSys()){ // ci/ж/б: режимов и k нет — игнорируем
     if(!VEL_LIMIT[a.mode]) throw new Error('неизвестный режим: '+a.mode);
     const wantHot=MODE_SYS.hot.includes(a.mode);
@@ -270,10 +315,13 @@ function configure(a){
   }
   // медь (frmtablII9): Frame2 «Выбор системы» и Frame4 «Температура, °С» вместо стального режима
   if(a.cu_system!==undefined){
-    {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('cu_system доступен на страницах меди, PEX и PEX-AL-PEX');}
-    const r=radVal('cusys',a.cu_system);
-    if(!r) throw new Error('cu_system должен быть cold, circ, supply или heat');
-    r.checked=true; spSysSync();
+    const spc=currentMat();
+    if(!spc.page.sys){ ign.push('cu_system: выбор системы есть только у меди, PEX и PEX-AL-PEX'); }
+    else{
+      const r=radVal('cusys',a.cu_system);
+      if(!r) throw new Error('cu_system='+a.cu_system+' на странице '+spc.id+' нет; доступны: '+Object.keys(spc.page.sys).join(', '));
+      r.checked=true; spSysSync();
+    }
   }
   // при Option1 «холодного водоснабжения» Frame4/Frame5 в оригинале неактивны: ν=1,3·10⁻⁶, ρ=1000
   // активность блоков как в frmtablII9: cold — оба неактивны; circ/supply — только «Температура»;
@@ -282,9 +330,13 @@ function configure(a){
   const CU_LOCK_T='на медной странице блок «Температура» неактивен при «холодного водоснабжения»: ν=1,3·10⁻⁶ м²/с, ρ=1000 кг/м³ (как в оригинале)';
   const CU_LOCK_C='на медной странице блок «Теплоноситель» неактивен кроме «системы отопления»: ν и ρ подставляются по температуре';
   if(a.t_c!==undefined){
-    {const cid=currentMat().id; if(cid!=='copper'&&cid!=='pex'&&cid!=='metal-pex') throw new Error('t_c доступен на страницах меди, PEX и PEX-AL-PEX');}
-    if(cuSysNow==='cold') throw new Error(CU_LOCK_T);
-    $('tcombo').value=String(a.t_c); spHeatSync();   // по t программа подставляет ν и ρ (пороги 50/60/70/80/90)
+    if(!spPage()) ign.push('t_c: температура есть только на страницах меди, PEX и PEX-AL-PEX');
+    else{
+      if(cuSysNow==='cold') throw new Error(CU_LOCK_T);
+      if(![...$('tcombo').options].some(o=>o.value===String(a.t_c)))
+        throw new Error('t_c должен быть 50, 60, 70, 80 или 90 (как в Combo3 оригинала)');
+      $('tcombo').value=String(a.t_c); spHeatSync();   // по t программа подставляет ν и ρ (пороги 50/60/70/80/90)
+    }
   }
   if(a.nu!==undefined||a.rho!==undefined){
     if(currentMat().sMap){ // медь: ν и ρ — Frame5 «Теплоноситель»: «другой» + Text3 (ν) и Text18 (ρ)
@@ -294,13 +346,15 @@ function configure(a){
       if(a.rho!==undefined){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('curho').value=String(a.rho); }
       spHeatSync();
     } else {
+      if(a.nu!==undefined && fixedSys()) ign.push('nu: на странице '+currentMat().id+' ν зафиксирована (1,3·10⁻⁶, вода 10 °C)');
+      if(a.rho!==undefined && fixedSys()) ign.push('rho: на странице '+currentMat().id+' ρ зафиксирована (1000 кг/м³)');
       if(a.nu!==undefined && !fixedSys()){ if(!(a.nu>0)) throw new Error('ν должно быть > 0'); $('nu').value=String(a.nu); }
       if(a.rho!==undefined && !fixedSys()){ if(!(a.rho>0)) throw new Error('ρ должно быть > 0'); $('rho').value=String(a.rho); }
     }
   }
   updDv(); // dp зависит от wear (чугун: −1 мм только у «неновых») — обновить после всех параметров
   const m=currentMat();
-  return textResult({ok:true,material:m.id,
+  return {ok:true,material:m.id,
     // wear — только там, где блок «новые/неновые» ЕСТЬ (сталь, э/с, чугун): на остальных страницах его
     // нет и в формулу он не входит, поэтому эхом «old» агент был бы введён в заблуждение.
     wear:m.ui.wear?rad('wear').value:undefined,
@@ -315,7 +369,11 @@ function configure(a){
     t_c:m.sMap?$('tcombo').value:undefined,
     cu_nu:m.sMap?$('cunu').value:undefined,
     cu_rho:m.sMap?$('curho').value:undefined,
-    xi_sum:m.sMap?xiTotal():undefined});
+    xi_sum:m.sMap?xiTotal():undefined,
+    vt:m.id==='asbes'?curVt():undefined,
+    tip:m.id==='asbes'?curTip():undefined,
+    sp4:(m.id==='pex'||m.id==='metal-pex')?$('pexSp').checked:undefined,
+    warnings:ign.length?ign:undefined};
 }
 
 /* Схемы параметров — константами, потому что их принимают четыре инструмента: объявлять один и тот
@@ -326,14 +384,17 @@ const CONF_PROPS={
   material:{type:'string',description:'id материала из shev-list-materials (steel, steel-es, ci, asbes, plastic, pe100, conc, grp, glass, copper, pex, metal-pex); если не передан — остаётся текущий'},
   pe:{type:'string',enum:['32','63','80','100'],description:'только plastic: марка ПЭ (frmtablII5 Frame2) — от неё зависит, какие серии SDR допустимы; ставь ДО sdr'},
   sdr:{type:'string',description:'серия труб: plastic/pe100 — номер SDR (например 11, 17; можно передать числом), pex — id серии (sdr11, sdr136). Серия меняет dв, а значит и ΔP: задавай её явно, не полагаясь на дефолт'},
-  cu_system:{type:'string',enum:['cold','circ','supply','heat'],description:'только copper/pex/metal-pex: система — cold=холодное водоснабжение (ф-ла 2, v≤4), circ=циркуляционный ГВС (ф-ла 2, v≤3), supply=подающие ГВС (ф-ла 3, v≤3), heat=отопление (ф-лы 5–9, v≤2)'},
+  cu_system:{type:'string',enum:['cold','circ','supply','heat','hot'],description:'только copper/pex/metal-pex. У меди: cold=ХВС (ф-ла 2, v≤4), circ=циркуляционный ГВС (ф-ла 2, v≤3), supply=подающие ГВС (ф-ла 3, v≤3), heat=отопление (ф-лы 5–9, v≤2). У PEX и PEX-AL-PEX выбор меньше: cold=ХВС, hot=ГВС, heat=отопление (одна λ, v≤4/3/2) — на их странице значения circ/supply не действуют'},
+  vt:{type:'string',enum:['ВТ6','ВТ9','ВТ12','ВТ15'],description:'только asbes: класс трубы ВТ по ГОСТ 539-80 — от пары (ВТ, тип) зависит dв; ставь вместе с tip'},
+  tip:{type:'string',enum:['1','2','3'],description:'только asbes: тип труб по размерам (frmtablII4); ВТ15 при типе 1 скрыта'},
+  sp4:{type:'boolean',description:'только pex/metal-pex: считать по формуле (4) СП 41-109-2005 (галка в окне); без неё — вариант программы, λ у него отличается примерно на треть'},
   t_c:{type:'number',enum:[50,60,70,80,90],description:'только copper/pex/metal-pex: температура воды °С (Combo3) — по ней программа подставляет ν и ρ (50→0,55e-6/990 … 90→0,36e-6/970); при пустой t ν=1,3e-6, ρ=1000'},
   wear:{type:'string',enum:['new','old'],description:'новые/неновые. Блок есть только у стали, электросварных и чугуна (там wear меняет формулу); на остальных страницах параметр не входит в расчёт и в ответе не эхомется'},
   pipe_class:{type:'string',enum:['ЛА','А','Б'],description:'класс чугунной трубы (только ci): единый список dу (14 значений, без 450/700/900) для всех классов, dp из таблицы класса'},
   wall_mm:{type:'number',description:'толщина стенки мм (сталь/э/с/медь). У этих страниц толщина своя у КАЖДОГО диаметра, поэтому задавай её после diameter_mm; в срезе shev-sweep она ставится на каждый dн отдельно и если у этого dн такой толщины нет — строка вернёт {dn, error}'},
-  mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (игнорируется для ci, conc, grp и glass — на этих страницах режима нет)'},
-  nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); игнорируется для ci, conc, grp и glass — там ν=1,3·10⁻⁶ (t=10°C) зафиксирована'},
-  rho:{type:'number',description:'плотность, кг/м³; игнорируется для ci, conc, grp и glass — там ρ=1000 (t=10°C) зафиксирована'}
+  mode:{type:'string',description:'режим: potable|combined|prod-fire|fire|dhw-supply|dhw-tp|dhw-risers (блок режима есть только у стали и электросварных; на остальных страницах игнорируется — факт игнора приходит в warnings)'},
+  nu:{type:'number',description:'кинематическая вязкость, м²/с (вода 10°C: 1.3e-6); действительна только на стальных страницах (и как «другой» теплоноситель у меди в отоплении); на остальных игнорируется с предупреждением'},
+  rho:{type:'number',description:'плотность, кг/м³; действительна только на стальных страницах (у меди — «другой» теплоноситель в отоплении); на остальных игнорируется с предупреждением'}
 };
 const D_PROPS={
   diameter_mm:{type:'number',description:'диаметр ИЗ РЯДА страницы (dу/dн/du, мм). Значения не из ряда здесь ошибка — перечисли доступные в сообщении'},
@@ -343,8 +404,8 @@ const CALC_PROPS={
   q:{type:'number',description:'расход (по умолчанию л/с)'},
   qunit:{type:'string',enum:['ls','mh'],description:'единицы расхода: ls=л/с, mh=м³/ч'},
   length_m:{type:'number',description:'длина участка L, м'},
-  k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (игнорируется для ci, conc, grp и glass: там H=i·L)'},
-  xi_total:{type:'number',description:'только copper: сумма ξ местных сопротивлений (Frame6 окна меди = ξ·количество + «другие ξ»); входит в H как V²Σξ/2g и в потери давления как Z=0,5ρV²Σξ'}
+  k:{type:'number',description:'коэффициент местных сопротивлений k ≥ 0 (только сталь и электросварные: переданный k сам включает галку «учесть потери на местные сопротивления»; на остальных страницах H=i·L и k игнорируется с предупреждением, как и при dу≥80/dн≥88, где блок скрыт)'},
+  xi_total:{type:'number',description:'сумма ξ местных сопротивлений для страниц с редактором ξ (медь, PEX, PEX-AL-PEX — Frame6 окна; задаётся «другими ξ», складываются без умножения); входит в H как V²Σξ/2g и в потери давления как Z=0,5ρV²Σξ; на остальных страницах игнорируется с предупреждением'}
 };
 const schema=props=>({type:'object',properties:props});
 
@@ -356,17 +417,23 @@ const schema=props=>({type:'object',properties:props});
    calcLosses в js/calc.js заранее умеет v вместо q (lossesIn), поэтому движок не менялся.
    Ключи ответа те же; рекомендации по диаметру нет — это «какой диаметр выгоден при расходе». */
 async function lossesByFlow(a){
-  configure(a); calcInputs(a); calc();
+  const ign=[];
+  const cfg=configure(a); calcInputs(a,ign); calc();
   const r=readResult();
   if(/ошибка|не должен|не может|не ввели/.test(r.raw)&&r.v_ms===null)
     return textResult({ok:false,error:r.raw.trim()});
-  return textResult(Object.assign({ok:true},r,echo()));
+  const out=Object.assign({ok:true},r,echo());
+  // рецензия §4.4: dv_from/dv_matched — и в ответе расчёта, не только в configure
+  if(a.dv_mm!==undefined){ out.dv_from=cfg.dv_from; out.dv_matched=cfg.dv_matched; }
+  if(ign.length){ out.warnings=(out.warnings||[]).concat(ign); out.ignored=ign; }
+  return textResult(out);
 }
 async function lossesByVelocity(a){
+  const ign=[];
   const v=+a.v_ms;
   if(!(v>0)) throw new Error('v_ms — скорость в м/с (> 0)');
-  configure(a);                       // сортамент: из него расчётный dв
-  calcInputs(a);                      // L, k, ξ — те же правила, что у расчёта по расходу
+  const cfg=configure(a);             // сортамент: из него расчётный dв
+  calcInputs(a,ign);                  // L, k, ξ — те же правила, что у расчёта по расходу
   const inp=readForm();
   const g=calcLosses(Object.assign({},inp,{q:NaN,v}));
   if(!g.ok) return textResult({ok:false,error:g.error});
@@ -378,7 +445,10 @@ async function lossesByVelocity(a){
     law:g.law,method:FORMULA_TEXT[g.law],
     // H и ΔP есть только при длине L (как в движке): без неё — только i и R
     note:g.L===undefined?'length_m не задан — H и потери давления не считаются, только i и R':undefined,
-    warnings:speedNotes(m.id,g.dv_mm,g.v,inp.mode).map(n=>n.text),
+    warnings:speedNotes(m.id,g.dv_mm,g.v,inp.mode).map(n=>n.text).concat(ign),
+    ignored:ign.length?ign:undefined,
+    dv_from:a.dv_mm!==undefined?cfg.dv_from:undefined,
+    dv_matched:a.dv_mm!==undefined?cfg.dv_matched:undefined,
     verdict:{v_limit:lim?{min:lim[0],max:lim[1]}:undefined,
       v_ok:lim?(g.v>=lim[0]&&g.v<=lim[1]):undefined,recommendation:null}});
 }
@@ -399,7 +469,8 @@ const TOOLS=[
           has_wall_thickness:!!(m.wall||m.gas||m.sMap),   // медь (frmtablII9): dн + толщина S
           dv_note:d.note,
           pipe_classes:d.pipe_classes,
-          series:d.series};
+          series:d.series,
+          wall_options:d.wall_options};
       }),
       modes:Object.keys(VEL_LIMIT).map(k=>({mode:k,min_v:VEL_LIMIT[k][0],max_v:VEL_LIMIT[k][1]})),
       units:['ls (л/с)','mh (м³/ч)']
@@ -408,9 +479,9 @@ const TOOLS=[
  },
  {
   name:'shev-configure',
-  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (dн из ряда страницы ИЛИ dv_mm — расчётный внутренний напрямую), толщину стенки, серию труб (pe — марка ПЭ, sdr — SDR), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Все параметры опциональны — меняется только переданное. На страницах чугуна, ж/б, стеклопластика и стекла режим/ν/ρ/k игнорируются (параметры программы). Возвращает подтверждение: что выбрано, чему равен расчётный dв и откуда он взят (dv_from: row — из сортамента, manual — ручной ввод). ПОРЯДОК: material → pe → sdr → diameter_mm (серия меняет список диаметров, поэтому ставить её надо до диаметра), wall_mm после diameter_mm, dv_mm последним (перекрывает diameter_mm). ПРИМЕР: {material:"steel-es", diameter_mm:1120, wall_mm:10, wear:"old", mode:"dhw-supply"} → dp=1099; без wall_mm программа возьмёт ПЕРВУЮ доступную для этого dн толщину (у dн=1120 это 8 мм → dp=1103). У меди {material:"copper", diameter_mm:22, wall_mm:1.0, cu_system:"circ", t_c:50}; у ПЭ 100 {material:"pe100", sdr:"17", diameter_mm:110}; по внутреннему диаметру {material:"pe100", dv_mm:76} — расчёт ровно при dв=76 (dv_from=manual, dv_matched=false).',
+  description:'Задаёт входные данные расчёта в UI: материал, новые/неновые, диаметр (dн из ряда страницы ИЛИ dv_mm — расчётный внутренний напрямую), толщину стенки, серию труб (pe — марка ПЭ, sdr — SDR), класс ВТ и тип а/ц трубы (vt/tip), галку «по формуле (4) СП» для PEX (sp4), режим водопровода, кинематическую вязкость ν (м²/с), плотность ρ (кг/м³). Параметр не той страницы и неизвестное имя НЕ проглатываются — возвращаются в warnings. Все параметры опциональны — меняется только переданное. На страницах чугуна, ж/б, стеклопластика и стекла режим/ν/ρ/k игнорируются (параметры программы). Возвращает подтверждение: что выбрано, чему равен расчётный dв и откуда он взят (dv_from: row — из сортамента, manual — ручной ввод). ПОРЯДОК: material → pe → sdr → diameter_mm (серия меняет список диаметров, поэтому ставить её надо до диаметра), wall_mm после diameter_mm, dv_mm последним (перекрывает diameter_mm). ПРИМЕР: {material:"steel-es", diameter_mm:1120, wall_mm:10, wear:"old", mode:"dhw-supply"} → dp=1099; без wall_mm программа возьмёт ПЕРВУЮ доступную для этого dн толщину (у dн=1120 это 8 мм → dp=1103). У меди {material:"copper", diameter_mm:22, wall_mm:1.0, cu_system:"circ", t_c:50}; у ПЭ 100 {material:"pe100", sdr:"17", diameter_mm:110}; по внутреннему диаметру {material:"pe100", dv_mm:76} — расчёт ровно при dв=76 (dv_from=manual, dv_matched=false).',
   inputSchema:schema(Object.assign({},CONF_PROPS,D_PROPS)),
-  async execute(a){ return configure(a); }
+  async execute(a){ return textResult(configure(a)); }
  },
  {
   name:'shev-velocity',
@@ -442,8 +513,9 @@ const TOOLS=[
 
   async execute(a){
     if(!Array.isArray(a.dn)||!a.dn.length) throw new Error('dn — непустой массив диаметров, мм');
+    const ign=[];
     configure(Object.assign({},a,{diameter_mm:undefined,dv_mm:undefined,wall_mm:undefined})); // материал/серия/режим — один раз
-    calcInputs(a);                                              // расход и длина — тоже один раз
+    calcInputs(a,ign);                                          // расход и длина — тоже один раз
     const rows=[];
     for(const dn of a.dn){
       try{
@@ -460,7 +532,7 @@ const TOOLS=[
       }catch(err){ rows.push({dn,error:err.message}); }
     }
     const st=pageState(), m=currentMat();
-    return textResult({ok:true,material:m.id,
+    return textResult({ok:true,material:m.id, warnings:ign.length?ign:undefined,
       pe:m.pe?st.pe:undefined,sdr:m.pe100?st.sdr100:(m.pe?st.sdr:undefined),series:m.series?st.series:undefined,
       q:numStrict($('q').value),qunit:$('qunit').value,length_m:numStrict($('len').value),rows});
   }
@@ -489,7 +561,8 @@ function applyQuery(qs){
   const num=v=>{const n=numStrict(String(v).replace(',','.'));return isNaN(n)?undefined:n;};
   const a={};
   for(const [k,v] of new URLSearchParams(src.slice(1))){
-    if(k==='material'||k==='pe'||k==='sdr'||k==='wear'||k==='pipe_class'||k==='mode'||k==='cu_system'||k==='qunit') a[k]=v;
+    if(k==='material'||k==='pe'||k==='sdr'||k==='wear'||k==='pipe_class'||k==='mode'||k==='cu_system'||k==='qunit'||k==='vt'||k==='tip') a[k]=v;
+    else if(k==='sp4') a[k]=(v==='1'||v==='true');
     else if(k==='diameter_mm'||k==='wall_mm'||k==='dv_mm'||k==='t_c'||k==='q'||k==='length_m'||k==='k'||k==='xi_total'){ const n=num(v); if(n!==undefined) a[k]=n; }
   }
   if(!Object.keys(a).length) return false;
@@ -502,7 +575,9 @@ function registerWebMCP(){
   const {mc,native}=getModelContext();
   if(!native) document.modelContext.__native=false;
   TOOLS.forEach(def=>{
-    try{ const r=mc.registerTool(def); if(r&&typeof r.catch==='function') r.catch(()=>{}); }catch(e){/* браузер отказал — polyfill-реестр всё равно доступен через window.webmcp */}
+    const safe=Object.assign({},def,{execute:a=>Promise.resolve(def.execute(a))
+      .catch(e=>textResult({ok:false,error:e.message}))});
+    try{ const r=mc.registerTool(safe); if(r&&typeof r.catch==='function') r.catch(()=>{}); }catch(e){/* браузер отказал — polyfill-реестр всё равно доступен через window.webmcp */}
   });
 }
 registerWebMCP();

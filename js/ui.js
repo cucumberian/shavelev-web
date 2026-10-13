@@ -543,7 +543,10 @@ function setDocLinks(m){
 
 /* ==== init ==== */
 fillMaterials();
-$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();if(!m.page.gated)$('danother').checked=false;applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
+// Смена вкладки = свежая форма, как в оригинале (у каждой страницы свой Check13): «другой dв»,
+// «по (4) СП» и ξ-«другие» не кочуют между материалами — иначе залипвший «другой» с а/ц гасит
+// серии PEX и configure падает (рецензия 13.10.2026 §4.3/§4.5).
+$('material').onchange=()=>{const m=currentMat();setDocLinks(m); fillXiGrid();$('danother').checked=false; if($('pexSp'))$('pexSp').checked=false; applyClsState();applySysVisibility();fillDiameters(); const hp=$('help'); if(hp&&hp.style.display==='block') hp.innerHTML=helpHtml();};
 $('dsel').onchange=fillDiameters;
 radAll('cls').forEach(r=>r.onchange=()=>{applyClsState();fillDiameters();});
 [...radAll('vt'),...radAll('tip')].forEach(r=>r.onchange=fillDiameters); // а/ц: ВТ/тип → пересборка dу и dв

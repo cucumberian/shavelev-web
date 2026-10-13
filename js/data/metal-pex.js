@@ -81,6 +81,7 @@ MAT_METAL_PEX.page={
   blocks:['pexSpRow'],              // галка «считать по формуле (4) СП» доступна и здесь
   labels:{d:'Наружный диаметр dн, мм:', dv:'Внутренний диаметр dв, мм:'},
   rows(){ return MAT_METAL_PEX.d.map(d=>[d,'dн='+d+' мм']); },
+  gated:true,                        // Check13 «другой dв» в окне есть — dv_mm принимается
   // dв подставляет программа по таблице dvMap (живые точки 08.10.2026: dн=16 → 12, v=8,842; i=8,122;
   // H=812,218; dн=40 → 33, v=3,508; i=0,48; H=47,976).
   dvOf(st,d){ const x=MAT_METAL_PEX.dvMap[+d]; return x===undefined?NaN:x; },

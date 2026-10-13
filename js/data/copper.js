@@ -54,6 +54,7 @@ MAT_COPPER.page={
   // ветвлении инструмента: прежняя цепь в webmcp.js однажды выдала metal-pex текст подписи стекла.
   discovery(st){ return {
     diameters:(this.rows(st)||[]).map(r=>r[0]),
+    wall_options:Object.fromEntries(this.rows(st).map(r=>[r[0],this.wallRows(st,r[0])||[]])),
     note:'diameter_mm=dн (СП 40-108-2004: 6…267 мм — 20 значений списка программы); dв=dн−2S (S — толщина стенки из списка), задавай wall_mm; «другой» — ручной dp; местные сопротивления — ξ (xi_total в shev-losses)'
   }; },
   // Карта систем Frame2 «Выбор системы» — у всех трёх СП-страниц своя: у меди это Option1–4

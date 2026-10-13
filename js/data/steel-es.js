@@ -87,6 +87,7 @@ MAT_STEEL_ES.page={
   // ветвлении инструмента: прежняя цепь в webmcp.js однажды выдала metal-pex текст подписи стекла.
   discovery(st){ return {
     diameters:(this.rows(st)||[]).map(r=>r[0]),
+    wall_options:Object.fromEntries(this.rows(st).map(r=>[r[0],this.wallRows(st,r[0])||[]])),
     note:'dв=dн−2s, задавай wall_mm'
   }; },
   labels:{d:'Наружный диаметр dн, мм:', t:'Толщина стенки S, мм:',
