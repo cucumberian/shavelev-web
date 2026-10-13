@@ -29,13 +29,21 @@
 
 const MATERIALS = [];
 const ECON_ROWS = {};
+/* ECON_RANGES — рекомендация по ТАБЛИЦЕ ДИАПАЗОНОВ РАСХОДА (л/с): [[dу, Qот, Qдо], …].
+   Так устроена страница а/ц (frmtablII4): в EXE есть ветка `If Q < 5` (__vbaVarTstLt @0x4cb9c9)
+   и по строке-шаблону на каждый диаметр — своя красная и своя зелёная строка (0x4450b8…0x4457d0
+   и 0x445134…0x445750). Берётся НАИМЕНЬШИЙ диаметр, чей диапазон содержит Q; совпал с выбранным →
+   «экономически обосновано», иначе → «рекомендуется использовать трубу …». */
+const ECON_RANGES = {};
 function registerMaterial(m){ MATERIALS.push(m); return m; }
 function registerRec(mat, rows){ ECON_ROWS[mat] = rows; }
+function registerRecRanges(mat, rows){ ECON_RANGES[mat] = rows; }
 // в node-тестах модули грузятся require-ом: экспорт registry виден им только через globalThis
-globalThis.MATERIALS = MATERIALS; globalThis.ECON_ROWS = ECON_ROWS;
+globalThis.MATERIALS = MATERIALS; globalThis.ECON_ROWS = ECON_ROWS; globalThis.ECON_RANGES = ECON_RANGES;
 globalThis.registerMaterial = registerMaterial; globalThis.registerRec = registerRec;
+globalThis.registerRecRanges = registerRecRanges;
 
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
-  module.exports={MATERIALS,ECON_ROWS,registerMaterial,registerRec};
+  module.exports={MATERIALS,ECON_ROWS,ECON_RANGES,registerMaterial,registerRec,registerRecRanges};
 }

@@ -155,11 +155,16 @@ function fillDiameters(){
    $('dvLabel').innerHTML='Расчётный внутренний диаметр dp, мм:';
    $('dpOther').style.display='';
  } else if(m.id==='asbes'){
-   // frmtablII4 (скрин оригинала 05.10.2026): радио ВТ6–ВТ15 + комбо dу + радио «Тип 1–3»;
-   // dв — из таблицы ГОСТ 539-80 (пул подсказок 0x42e5c..0x44f5c). Тип 1 ⇒ ВТ15 недоступен (у ВТ15 только тип 2).
+   // frmtablII4: радио ВТ6–ВТ15 + комбо dу + радио «Тип 1–3»; dв — из таблицы ГОСТ 539-80.
+   // При Тип 1 программа ВТ15 ПРЯЧЕТ целиком (живой кадр ac_v15_tip1: подписи нет вовсе,
+   // 0 тёмных пикселей против 71 при Тип 2/3), а не гасит её: в ГОСТ 539-80 табл. 2 класса
+   // ВТ15 нет вообще, так что здесь программа и стандарт совпадают. Прежняя запись «у ВТ15
+   // только тип 2» неверна — при Тип 3 ВТ15 видна и выбирается (ac_v15_tip3), см. данные.
    $('vtRow').style.display=''; $('tipRow').style.display='';
    const t15=document.querySelector('input[name=vt][value="ВТ15"]');
-   t15.disabled=curTip()===1;
+   const hide15=curTip()===1;
+   t15.closest('label').style.display=hide15?'none':'';
+   t15.disabled=hide15;
    if(t15.disabled&&t15.checked)document.querySelector('input[name=vt][value="ВТ6"]').checked=true;
    const vt=curVt(),tip=curTip();
    m.vt.filter(v=>v.items.some(it=>it[0]===vt&&it[1]===tip)).forEach(v=>{
@@ -267,7 +272,10 @@ function fillDiameters(){
    $('dpOther').style.display='';
  } else if(m.id==='asbes'){ // frmtablII4: dу + dв + «Другой» (помогает флажок из справки)
    $('dLabel').textContent='Условный проход dу, мм:';
-   $('dvLabel').innerHTML='Внутренний диаметр dp, мм:';
+   // Подпись ровно как рамка оригинала: «Внутренний диаметр, мм» — без «dp» (живые кадры
+   // ac_du150_vt12_t1 и др.). В оригинале шапка его таблицы результатов печатает «d= <номинальный dу>»
+   // (не dв); клон выводит результаты текстом, такой шапки у него нет — это различие структуры, не баг.
+   $('dvLabel').innerHTML='Внутренний диаметр, мм:';
    $('dpOther').style.display='';
   } else if(m.pe){ // frmtablII5: dн + dв + «не по ГОСТу» (Check1, 0x5fcfe)
    $('dLabel').textContent='Наружный диаметр dн, мм:';

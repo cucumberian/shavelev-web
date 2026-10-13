@@ -94,12 +94,38 @@ function speedNotes(mat,dv_mm,v,mode){
  return out;
 }
 
+/* ─── рекомендация по ПРЕДЕЛЬНЫМ ЭКОНОМИЧЕСКИМ РАСХОДАМ (страница а/ц, frmtablII4) ───
+   Источник таблицы — Шевелевы 1984, табл. 12, стр. 25, колонка Э=0,75 (разбор и живые точки —
+   в js/data/asbes.js). Правило книги (стр. 23): берётся ПЕРВЫЙ диаметр, чей предельный расход не
+   меньше Q. Строки EXE: 0x444fd8 «При расходе », 0x444ff8 «л/сек =», 0x44500c «м куб/ч », 0x445030
+   «…менее 100мм», 0x4450b8…0x4457d0 красные 100…500, 0x445134…0x445750 зелёные «Применение трубы
+   с условным проходом Nмм при расходе », 0x4451a8 «экономически обосновано», 0x44584c+0x445890
+   «Большая скорость! …более 500мм»; в коде есть ветка `If Q < 5` (__vbaVarTstLt @0x4cb9c9).
+   Оригинал: Q < 5 → «менее 100мм», Q ровно 5 → НИЧЕГО (строгие неравенства автора), Q выше предела
+   последнего диаметра → «более 500мм». Числа в строке — как VB6 Str(): точка, хвостовые нули отброшены
+   («При расходе 3л/сек =10.8м куб/ч …»). */
+function vbs(x){ return String(Math.round(x*100)/100); }
+function recRanges(mat,rows,q_m3s,selD){
+ const qls=q_m3s*1000, m3=q_m3s*3600, pre=`При расходе ${vbs(qls)}л/сек =${vbs(m3)}м куб/ч `;
+ const first=rows[0], last=rows[rows.length-1];
+ if(qls<5) return {cls:'warn',text:pre+`рекомендуется использовать трубу с условным проходом менее ${first[0]}мм`};
+ if(qls===5) return null;   // ровно 5 — дырка оригинала (строгие неравенства), проверено живьём
+ if(qls>last[1]) return {cls:'warn',text:`Большая скорость! `+pre+`рекомендуется использовать трубу с диаметром более ${last[0]}мм`};
+ let opt=null;
+ for(const [du,qmax] of rows){ if(qls<=qmax){ opt=du; break; } }
+ if(opt===null) return null;
+ if(opt===selD) return {cls:'ok',text:`Применение трубы с условным проходом ${opt}мм `+pre+`экономически обосновано`};
+ return {cls:'warn',text:pre+`рекомендуется использовать трубу с условным проходом ${opt}мм`};
+}
+
 /* ─── строка рекомендации (ряды ECON_ROWS; подписи строк в EXE 0x44fd4..0x47434) ───
    opt = минимальный ряд с v(dp) ≤ VREC; sel==opt → «экономически обосновано», иначе →
    «рекомендуется использовать трубу …». dpOf(d) замыкает ui.js: расчётный dp ряда зависит от
    стенки (газовые/э/с), класса и «неновые» (чугун), SDR (ПЭ). */
 function recommendation(mat,wear,q_m3s,selD,dpOf){
- const m=matOf(mat), rows=ECON_ROWS[mat];
+ const m=matOf(mat), rng=ECON_RANGES[mat];
+ if(rng) return recRanges(mat,rng,q_m3s,selD);
+ const rows=ECON_ROWS[mat];
  if(!rows) return null;
  const qls=q_m3s*1000, m3=q_m3s*3600;
  const vrow=d=>{const dp=dpOf(d); if(isNaN(dp)) return NaN; return velocity(q_m3s,dp);};
