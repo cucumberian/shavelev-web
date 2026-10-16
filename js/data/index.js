@@ -22,9 +22,9 @@ require("./copper.js");
 require("./pex.js");
 require("./metal-pex.js");
 const {DOCS} = require("./docs.js");
-const {VREC,VEL_LIMIT,K_MODE,MODE_SYS,MODE_LABELS} = require("./modes.js");
+const {VEL_LIMIT,K_MODE,MODE_SYS,MODE_LABELS} = require("./modes.js");
 
 if (typeof module!=='undefined' && module.exports){
-  module.exports={MATERIALS:reg.MATERIALS, DOCS, VREC, VEL_LIMIT, ...FMT,
+  module.exports={MATERIALS:reg.MATERIALS, DOCS, VEL_LIMIT, ...FMT,
     K_MODE, MODE_SYS, MODE_LABELS};
 }

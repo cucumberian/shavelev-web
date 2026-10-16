@@ -18,7 +18,7 @@ function grpHelpState(){
    selD:parseFloat($('dsel').value), dpOf:d=>d});
  if(!r.ok) return null;
  return {r:r,qRaw:qRaw,qm3:qToM3s(qRaw,$('qunit').value),dv:dv,L:L,d:dv/1000,
-   dsel:parseFloat($('dsel').value),manual:$('danother').checked,lam:r.A*G2};
+   dsel:parseFloat($('dsel').value),manual:$('danother').checked,lam:r.A*(2*G)};
 }
 
 /* Вводный текст (то, что в оригинале напечатано в окне справки) + сортамент. */

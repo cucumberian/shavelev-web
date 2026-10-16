@@ -25,7 +25,7 @@ function steelHelpState(){
  const nu0=(!isNaN(r.nu)&&r.nu>0)?r.nu:1.3e-6;             // ν входит в формулы стали (EXE)
  const vsel=r.v/nu0;                                      // селектор ветки: v/ν, порог 9,2·10⁵ 1/м (EXE)
  return {id:m.id,wear:wear,r:r,qRaw:qRaw,qm3:qToM3s(qRaw,$('qunit').value),dv:dv,dn:dn,S:S,
-    L:L,d:d,manual:$('danother').checked,nu:nu0,sel:vsel,lam:r.A*G2/Math.pow(d,r.e-1)}; // ν и v/(d·ν) — селектор ветки (EXE)
+    L:L,d:d,manual:$('danother').checked,nu:nu0,sel:vsel,lam:r.A*(2*G)/Math.pow(d,r.e-1)}; // ν и v/(d·ν) — селектор ветки (EXE)
 }
 
 /* Вводный текст (то, что в оригинале напечатано в окне справки) + расшифровка букв. */

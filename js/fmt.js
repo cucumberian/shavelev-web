@@ -27,8 +27,12 @@ function fmt3(x){return x.toFixed(3).replace('.',',');}
    Строки рекомендации а/ц и пластика (frmtablII4/frmtablII5) печатаются программой именно так:
    «При расходе 3л/сек =10.8м куб/ч …» — без пробелов вокруг знаков. */
 function vbs(x){ return String(Math.round(x*100)/100); }
+/* vbsc — тот же VB6 Str(), но с десятичной ЗАПЯТОЙ. Строки рекомендации ж/б (frmtablII7) печатаются
+   так: «…=118,8м куб/ч,…» (кадр recA_q33), тогда как а/ц той же программы печатает точку:
+   «=28.8м куб/ч» (кадр ac_rec2_du200_q8). Разница реальная, обе ветки в EXE свои. */
+function vbsc(x){ return vbs(x).replace('.', ',');}
 
 /* экспорт для node-тестов (в браузере window есть, в node — global) */
 if (typeof module!=='undefined' && module.exports){
-  module.exports={fmt,fmt2,fmt3,vbs};
+  module.exports={fmt,fmt2,fmt3,vbs,vbsc};
 }

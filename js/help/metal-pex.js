@@ -75,7 +75,7 @@ registerHelp('metal-pex', {
   var lg=Math.log10, re=v*d/nu6, rek=500*d/PEX_KE, l37=lg(3.7*d/PEX_KE);
   var b=1+lg(re)/lg(rek), cap=b>2; if(cap) b=2;
   var lamSp=pexLambdaSP(nu6,v,d), lamPr=pexLambda(nu6,v,d), lam=sp?lamSp:lamPr;
-  var i=lam*v*v/(2*G*d), R=lam*v*v/(2*d)*1000, Z=0.5*rho*v*v*xi, H=i*Ln+v*v*xi/G2, P=R*Ln+Z;
+  var i=lam*v*v/(2*G*d), R=lam*v*v/(2*d)*1000, Z=0.5*rho*v*v*xi, H=i*Ln+v*v*xi/(2*G), P=R*Ln+Z;
   var f=function(x,n){return x.toFixed(n).replace('.',',')};
   var line=function(texsrc,res){ return {sub:texsrc,res:res}; }; // строку собирает js/help.js
   var dn=numStrict($('dsel').value), Sst=(dn-dv)/2;

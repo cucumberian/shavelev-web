@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="agent-entry" content="WebMCP: shev-list-materials, shev-configure, shev-losses, shev-velocity, shev-sweep, shev-get-formulas, shev-pipe-passport; docs: README.md; engine: js/calc.js">
 <title>Таблицы Шевелева — клон</title>
 <link rel="icon" type="image/x-icon" href="shev.ico"><!-- иконка извлечена из shev.exe (RT_GROUP_ICON id=1) -->
 <link rel="stylesheet" href="styles.css">
@@ -224,6 +225,7 @@
 
 <!-- Порядок важен: формулы → данные → UI (классические скрипты: работает с file:// без сервера) -->
 
+<!-- агентам: скрипты грузятся в порядке вкладок; js/calc.js — расчётный движок; WebMCP-инструменты регистрируются после ui.js; поля те же, что у shev-configure/shev-losses. -->
 <script src="vendor/katex/katex.min.js"></script>
 <script src="js/fmt.js?v=0.3.0"></script>
 <script src="js/help.js?v=0.3.0"></script>

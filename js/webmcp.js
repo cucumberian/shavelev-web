@@ -192,6 +192,8 @@ function echo(){
     inputs:Object.assign({},inp,{pe:m.pe?st.pe:undefined,
       sdr:m.pe100?st.sdr100:(m.pe?st.sdr:undefined), series:m.series?st.series:undefined}),
     result:{v:r.v,i_m_per_m:r.i,i1000_mm_per_m:r.i1000,R:r.R,H:r.H,dP:r.P,k:r.k,A:r.A,e:r.e,dv:r.dv_mm,L:r.L,rho:r.rho,q:r.q,
+      nu:r.nu, unit_suspect:r.unit_suspect,
+      trace:r.trace,
       law:r.law, method:FORMULA_TEXT[r.law]},
     verdict:{
       v_limit:lim?{min:lim[0],max:lim[1]}:undefined,
@@ -204,29 +206,6 @@ function echo(){
         axis:(m.page.rec&&m.page.rec.axis)||'dу',optimum_mm:mm(rec.text)}:null}};
 }
 
-/* Тексты формул — ОДИН текст на двух потребителей: карта для shev-get-formulas и поле method
-   результата shev-losses (какая формула фактически применена к этому расчёту) — чтобы агент
-   объяснил результат пользователю без второго вызова. Источник значений — js/formulas.js. */
-const MODEL_TEXT='i[м/м]=A·v²/d^e; A≡λ/(2g); R=ρ·g·i; H=i·L·(1+k), для ci, ж/б, стеклопластика и стекла H=i·L. Медь (СП 40-108-2004) — другие формулы, местные сопротивления не через k: H=i·L+V²Σξ/(2g), ΔP=R·L+Z. g=9.80665 — одно на всю программу, 2g=19.6133 (в оригинале было 9,80665 и 9,81, см. G в formulas.js). ВНИМАНИЕ, ЕДИНИЦЫ И A: во всех формулах d (он же dp, он же dв) — в МЕТРАХ, а результат i печатается в мм/м (=1000i), R в Па/м; A в ответе shev-losses — коэффициент ПРИ ТЕКУЩЕЙ скорости v и пересчитывается по ней (у полиэтилена A=0,000685·v^−0,226, т.е. закон не чистый A·v²/d^e), поэтому при другой скорости A из ответа не годится — считай по строке method';
-/* Ключи — ИМЕНА ФОРМУЛ, которые возвращает сам движок (law в iCalc/steelI/page.loss):
-   агент получает id и текст одного и того же объекта, а webmcp больше не решает, чем посчитано. */
-const FORMULA_TEXT={
-          steelNew:'сталь/э/с «новые»: λ=0.0159·(1+0,684/v)^0.226/d^0.226; i=λ·v²/(2g·d), d — в метрах',
-          ciNew:'чугун «новые»: λ=0.0144·(1+2,36/v)^0.284/d^0.284; i=λ·v²/(2g·d), d — в метрах',
-          oldA:'кн. Шевелевы, формула (6): A=0.00107; e=1.3 — стальные неновые при v/ν ≥ 9,2·10⁵, чугунные неновые при v ≥ 1,2 и любая сталь в ГВС',
-          oldB:'кн. Шевелевы, формула (7) (поправка на отложения): A=0.000912·(1+0,867/v)^0.3; e=1.3 — при v/ν < 9,2·10⁵ (сталь ХВС) и v < 1,2 (чугун)',
-          asbes:'A=0.000561·(1+3.51/v)^0.190; e=1.19, d — в метрах',
-          conc:'A=0.000802·(1+3.51/v)^0.190; e=1.19, d — в метрах',
-          plastic:'i=0.000685·v^1.774/dp^1.226, dp — в метрах',
-          glass:'i=0.000745·v^1.774/dp^1.226, dp — в метрах',
-          grp:'λ=0.0146·(v·dp)^-0.226; i=λ·v²/(2g·dp) (A=λ/(2g), e=1) — СП 40-104-2001, dp в метрах',
-          cu2:'СП 40-108-2004 формула (2): i=0,0161·ν^0,25·V^1,75/d^1,25 — холодное водоснабжение и циркуляционные линии ГВС',
-          cu3:'СП 40-108-2004 формула (3): i=0,051·((6,52·lg d+lg(Vd/ν))/(115·lg²d)+(0,66·lg d+0,1·lg(Vd/ν))/(lg(Vd/ν)·lg d))·V²/d — подающие линии ГВС',
-          cu5:'СП 40-108-2004 формулы (5)–(9): R=λ·V²/(2d)·10³ Па/м; √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Kз)/(lg Re−1)]/lg(3,7d/Kз); Re_кз=500d/Kз; b=1+lg Re/lg Re_кз; Kз=10⁻⁵ (трубы медные)',
-          cu_local:'СП 40-108-2004 п.3.4.4: ΔP=R·L+Z, Z=0,5·ρ·V²·Σξ; H=i·L+V²Σξ/(2g); ξ — Приложение А (отвод 90° 0,5 … калач 0,7)',
-        pex:'СП 41-109-2005 п.3.5 — вариант программы (calc FUN_00526810): √λ=0,5·[b/2+1,312(2−b)]/(lg Re_φ−1); Re_φ=dV/ν_t, Re_кз=500d/Кэ, b=1+lgRe_φ/lgRe_кз (b≤2), Кэ=1,0·10⁻⁶ м; i=λ·V²/(2g·d). Множитель lg(3,7d/Кэ) в оригинале сокращается — см. pexLambda в js/formulas.js',
-        pexSP:'тот же λ, но по формуле (4) СП 41-109-2005 / (3) СП 40-102-2000 — галка «считать по формуле (4) СП»: √λ=0,5·[b/2+1,312(2−b)·lg(3,7d/Кэ)/(lg Re−1)]/lg(3,7d/Кэ)'
-  };
 
 /* Расход, длина и местные сопротивления — параметры РАСЧЁТА, а не материала: именованная функция,
    потому что их задают и shev-losses, и shev-sweep (один раз на весь срез). */
@@ -360,15 +339,15 @@ function configure(a){
     wear:m.ui.wear?rad('wear').value:undefined,
     pipe_class:m.cls?curCls():undefined,
     diameter_mm:numStrict($('dsel').value)||undefined,
-    dv_mm:$('dcv').value,dv_from:dvFrom,dv_matched:dvMatched,
-    mode:$('mode').value,nu:$('nu').value,rho:$('rho').value,
+    dv_mm:numStrict($('dcv').value)||undefined,dv_from:dvFrom,dv_matched:dvMatched,
+    mode:$('mode').value,nu:numStrict($('nu').value),rho:numStrict($('rho').value),
     pe:m.pe?curPe():undefined,
     sdr:m.pe100?curPe100Sdr():(m.pe?curSdr():undefined),
     series:m.series?curPexSdr():undefined,
     cu_system:spPage()?spSysVal():undefined,
-    t_c:m.sMap?$('tcombo').value:undefined,
-    cu_nu:m.sMap?$('cunu').value:undefined,
-    cu_rho:m.sMap?$('curho').value:undefined,
+    t_c:m.sMap?numStrict($('tcombo').value):undefined,
+    cu_nu:m.sMap?numStrict($('cunu').value):undefined,
+    cu_rho:m.sMap?numStrict($('curho').value):undefined,
     xi_sum:m.sMap?xiTotal():undefined,
     vt:m.id==='asbes'?curVt():undefined,
     tip:m.id==='asbes'?curTip():undefined,
@@ -417,8 +396,8 @@ const schema=props=>({type:'object',properties:props});
    calcLosses в js/calc.js заранее умеет v вместо q (lossesIn), поэтому движок не менялся.
    Ключи ответа те же; рекомендации по диаметру нет — это «какой диаметр выгоден при расходе». */
 async function lossesByFlow(a){
-  const ign=[];
-  const cfg=configure(a); calcInputs(a,ign); calc();
+  const cfg=configure(a), ign=(cfg.warnings||[]).slice();
+  calcInputs(a,ign); calc();
   const r=readResult();
   if(/ошибка|не должен|не может|не ввели/.test(r.raw)&&r.v_ms===null)
     return textResult({ok:false,error:r.raw.trim()});
@@ -432,10 +411,11 @@ async function lossesByVelocity(a){
   const ign=[];
   const v=+a.v_ms;
   if(!(v>0)) throw new Error('v_ms — скорость в м/с (> 0)');
-  const cfg=configure(a);             // сортамент: из него расчётный dв
+  const cfg=configure(a); ign.push.apply(ign,cfg.warnings||[]);
+  if(a.q!==undefined) ign.push('получены q и v_ms: расчёт по скорости v_ms, q проигнорирован');
   calcInputs(a,ign);                  // L, k, ξ — те же правила, что у расчёта по расходу
   const inp=readForm();
-  const g=calcLosses(Object.assign({},inp,{q:NaN,v}));
+  const g=calcLosses(Object.assign({},inp,{q_m3s:NaN,v}));   // расход не нужен: скорость уже дана
   if(!g.ok) return textResult({ok:false,error:g.error});
   const m=currentMat(), lim=vLimit(m,inp,g.dv_mm);
   return textResult({ok:true,screen:false,v_from:'v_ms',
@@ -513,8 +493,8 @@ const TOOLS=[
 
   async execute(a){
     if(!Array.isArray(a.dn)||!a.dn.length) throw new Error('dn — непустой массив диаметров, мм');
-    const ign=[];
-    configure(Object.assign({},a,{diameter_mm:undefined,dv_mm:undefined,wall_mm:undefined})); // материал/серия/режим — один раз
+    const cfg=configure(Object.assign({},a,{diameter_mm:undefined,dv_mm:undefined,wall_mm:undefined})); // материал/серия/режим — один раз
+    const ign=(cfg.warnings||[]).slice();
     calcInputs(a,ign);                                          // расход и длина — тоже один раз
     const rows=[];
     for(const dn of a.dn){
